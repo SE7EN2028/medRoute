@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "MedRoute",
+    "slug": "medroute",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.medroute.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "MedRoute uses your location to find nearby hospitals and emergency services.",
+        "NSMicrophoneUsageDescription": "MedRoute uses the microphone so you can describe symptoms by voice.",
+        "NSCalendarsUsageDescription": "MedRoute saves blood-donation camps to your calendar when you opt in."
+      }
+    },
+    "android": {
+      "package": "com.medroute.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_AT_RUNTIME_OR_VIA_EAS_SECRET"
+        }
+      }
+    },
+    "plugins": [
+      "expo-location",
+      "expo-secure-store",
+      "expo-calendar",
+      "expo-audio",
+      "expo-font"
+    ]
+  }
+}

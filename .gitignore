@@ -1,0 +1,36 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+
+.env
+.env.local
+.env.*.local
+
+# dev-only api keys (use apiKeys.example.ts as template)
+app/config/apiKeys.ts
+
+
+# OS
+.DS_Store
+Thumbs.db
+
+
+ios/
+android/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+.claude/
+*-medRoute.txt
+
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
