@@ -9,7 +9,8 @@ import {
 import type { TabScreenProps } from '@app/navigation/types';
 import { useAppStore } from '@app/store/useAppStore';
 import { transcribeAudio } from '@app/services/groqService';
-import { requestLocationPermission } from '@app/services/locationService';
+import { requestLocationPermission, getLocationOrDefault } from '@app/services/locationService';
+import { nearestEmergencyHospitals } from '@app/services/placesService';
 import { Icon } from '@app/components/Icon';
 import { Btn } from '@app/components/Btn';
 import { Card } from '@app/components/Card';
@@ -41,11 +42,23 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const userName = useMemo(() => contacts[0]?.name?.split(' ')[0] ?? 'there', [contacts]);
 
-  // Ask for location once when Home mounts so the OSM hospital lookup has real
-  // coords by the time the user triggers triage. Silent if already granted/denied.
+  const manualLocation = useAppStore((s) => s.manualLocation);
+
+  // Ask for location, then prefetch nearby hospital list so it's already
+  // cached by the time the user triggers triage. Fire-and-forget.
   useEffect(() => {
-    requestLocationPermission().catch(() => {});
-  }, []);
+    (async () => {
+      try {
+        await requestLocationPermission();
+      } catch {}
+      try {
+        const manual = manualLocation ? { lat: manualLocation.lat, lng: manualLocation.lng } : null;
+        const { location } = await getLocationOrDefault(manual);
+        // Warm the cache — same key the Emergency/Results screens will look up.
+        nearestEmergencyHospitals({ origin: location }).catch(() => {});
+      } catch {}
+    })();
+  }, [manualLocation]);
 
   const onSubmit = () => {
     const trimmed = text.trim();
