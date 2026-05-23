@@ -31,3 +31,30 @@ export async function geocodeQuery(text: string): Promise<GeocodeHit | null> {
     location: { lat: parseFloat(r.lat), lng: parseFloat(r.lon) },
   };
 }
+
+const REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+
+interface ReverseResult {
+  display_name: string;
+  address?: {
+    suburb?: string;
+    neighbourhood?: string;
+    village?: string;
+    city?: string;
+    town?: string;
+    state?: string;
+  };
+}
+
+/** Lat/lng → human-readable label via Nominatim reverse geocoder. */
+export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const url = `${REVERSE_URL}?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=14`;
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+    if (!res.ok) return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    const r = (await res.json()) as ReverseResult;
+    return r.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  } catch {
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+}

@@ -6,6 +6,7 @@ import { Icon, type IconName } from '@app/components/Icon';
 import { Card } from '@app/components/Card';
 import { Btn } from '@app/components/Btn';
 import { Toggle } from '@app/components/Toggle';
+import { LocationPicker } from '@app/components/LocationPicker';
 import { Hero, Body, Caption, Eyebrow } from '@app/components/Type';
 import { Screen, TAB_BAR_BOTTOM_PAD } from '@app/components/Screen';
 import { useAppStore } from '@app/store/useAppStore';
@@ -237,6 +238,7 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
   const [bloodDraft, setBloodDraft] = useState('');
   const [locQuery, setLocQuery] = useState('');
   const [locSearching, setLocSearching] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const manualLocation = useAppStore((s) => s.manualLocation);
   const setManualLocation = useAppStore((s) => s.setManualLocation);
 
@@ -445,7 +447,7 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
         <Section title="Location" sub="Used to find nearby hospitals & camps">
           {manualLocation ? (
             <View style={{ padding: 14 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                 <View
                   style={{
                     width: 36, height: 36, borderRadius: 12,
@@ -472,16 +474,40 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
                     backgroundColor: colors.ink,
                     alignItems: 'center', justifyContent: 'center',
                     opacity: pressed ? 0.7 : 1,
+                    marginLeft: 6,
                   })}
                 >
                   <Icon name="x" size={12} stroke="#fff" strokeWidth={2.4} />
                 </Pressable>
               </View>
+              <View style={{ marginTop: 10 }}>
+                <Btn
+                  variant="paper"
+                  size="sm"
+                  full
+                  onPress={() => setPickerOpen(true)}
+                  icon={<Icon name="map" size={14} stroke={colors.ink} />}
+                >
+                  Change on map
+                </Btn>
+              </View>
             </View>
           ) : (
             <View style={{ padding: 14 }}>
-              <Caption style={{ marginBottom: 8 }}>
-                Type your area + city (e.g. "Lohegaon Pune") to set location manually.
+              <Caption style={{ marginBottom: 10 }}>
+                Pick a precise spot on the map — much more accurate than typing a city name.
+              </Caption>
+              <Btn
+                variant="primary"
+                size="md"
+                full
+                onPress={() => setPickerOpen(true)}
+                icon={<Icon name="map" size={15} stroke={colors.cream2} />}
+              >
+                Pin location on map
+              </Btn>
+              <Caption color={colors.muted2} align="center" style={{ marginTop: 10, marginBottom: 8 }}>
+                — or search by name —
               </Caption>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View
@@ -518,7 +544,7 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
                   />
                 </View>
                 <Btn
-                  variant="primary"
+                  variant="paper"
                   size="md"
                   onPress={onSearchLocation}
                   loading={locSearching}
@@ -530,6 +556,17 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
             </View>
           )}
         </Section>
+
+        <LocationPicker
+          visible={pickerOpen}
+          initial={manualLocation}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={(m) => {
+            setManualLocation(m);
+            setPickerOpen(false);
+            Alert.alert('Location pinned', m.label);
+          }}
+        />
 
         {/* Emergency contacts */}
         <Section title="Emergency contacts" sub="Used by 'Bring someone with you'">

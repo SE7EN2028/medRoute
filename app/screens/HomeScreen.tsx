@@ -220,40 +220,42 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
         {/* Sample prompts */}
         <View style={{ paddingHorizontal: 22, paddingTop: 22 }}>
           <Caption style={{ marginBottom: 10 }}>Or try one of these</Caption>
-          <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 }}>
             {SAMPLE_PROMPTS.map((p, i) => (
-              <Pressable
-                key={i}
-                onPress={() => setText(p)}
-                accessibilityRole="button"
-                style={({ pressed }) => ({
-                  paddingVertical: 12,
-                  paddingHorizontal: 14,
-                  backgroundColor: 'rgba(255,255,255,0.55)',
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  borderRadius: 14,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Icon name="sparkle" size={13} stroke={colors.terra} />
-                <Text
-                  style={{
+              <View key={i} style={{ width: '50%', padding: 4 }}>
+                <Pressable
+                  onPress={() => setText(p)}
+                  accessibilityRole="button"
+                  style={({ pressed }) => ({
                     flex: 1,
-                    marginLeft: 10,
-                    marginRight: 10,
-                    fontSize: 13.5,
-                    color: colors.ink2,
-                    fontFamily: fonts.sans,
-                    lineHeight: 19,
-                  }}
+                    minHeight: 110,
+                    paddingVertical: 14,
+                    paddingHorizontal: 14,
+                    backgroundColor: 'rgba(255,255,255,0.55)',
+                    borderWidth: 1,
+                    borderColor: colors.line,
+                    borderRadius: 14,
+                    justifyContent: 'space-between',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
                 >
-                  "{p}"
-                </Text>
-                <Icon name="arrow-up" size={13} stroke={colors.muted} />
-              </Pressable>
+                  <Icon name="sparkle" size={13} stroke={colors.terra} />
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      color: colors.ink2,
+                      fontFamily: fonts.sans,
+                      lineHeight: 18,
+                    }}
+                  >
+                    "{p}"
+                  </Text>
+                  <View style={{ alignSelf: 'flex-end', marginTop: 8 }}>
+                    <Icon name="arrow-up" size={13} stroke={colors.muted} />
+                  </View>
+                </Pressable>
+              </View>
             ))}
           </View>
         </View>
@@ -268,7 +270,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
               padding: 14,
               paddingRight: 16,
               borderRadius: 18,
-              backgroundColor: colors.brickDeep,
+              backgroundColor: '#000',
               flexDirection: 'row',
               alignItems: 'center',
               opacity: pressed ? 0.85 : 1,
@@ -277,7 +279,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
             <View
               style={{
                 width: 40, height: 40, borderRadius: 999,
-                backgroundColor: colors.brick,
+                backgroundColor: '#1a1a1a',
                 alignItems: 'center', justifyContent: 'center', marginRight: 14,
               }}
             >

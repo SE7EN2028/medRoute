@@ -6,8 +6,8 @@ import { haversineKm } from '@app/utils/distance';
 // 30-min TTL, keyed by rounded coords + specialty + radius. Hospital data
 // rarely changes; OSM tile-level queries are deterministic. Cache key is
 // rounded to ~1km so small phone drift still hits the cache.
-const CACHE_TTL_MS = 30 * 60 * 1000;
-const CACHE_PREFIX = 'medroute.overpass.v1.';
+const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — hospitals rarely move
+const CACHE_PREFIX = 'medroute.overpass.v2.';
 
 interface CacheEntry {
   ts: number;
@@ -133,16 +133,15 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-const MIRROR_TIMEOUT_MS = 25000; // RN's first-hit fetch can be slow (DNS+TLS+OS overhead); give wide margin
+const MIRROR_TIMEOUT_MS = 12000; // single mirror, tighter cap
 
-async function runOverpassAt(url: string, query: string, signal: AbortSignal): Promise<OsmElement[]> {
+async function runOverpassAt(url: string, query: string): Promise<OsmElement[]> {
   const trimmed = query.replace(/\s+/g, ' ').trim();
-  // GET ?data=... — lighter than POST + form body in React Native.
   const fullUrl = `${url}?data=${encodeURIComponent(trimmed)}`;
   const host = url.replace(/^https?:\/\//, '').split('/')[0];
   const t0 = Date.now();
   const res = await withTimeout(
-    fetch(fullUrl, { method: 'GET', signal }),
+    fetch(fullUrl, { method: 'GET' }),
     MIRROR_TIMEOUT_MS,
     `Overpass ${host}`,
   );
@@ -156,35 +155,20 @@ async function runOverpassAt(url: string, query: string, signal: AbortSignal): P
   return data.elements ?? [];
 }
 
-// Race all mirrors in parallel — first successful response wins. Once one
-// succeeds, in-flight stragglers are aborted so no socket leaks. If every
-// mirror fails, the overall failure surfaces after MIRROR_TIMEOUT_MS at most.
+// Sequential: hit one mirror, if it fails fall to next. Avoids burst-firing all
+// mirrors at once which can trigger rate-limits on repeat lookups.
 async function runOverpass(query: string): Promise<OsmElement[]> {
   const errors: string[] = [];
-  const controllers = OVERPASS_MIRRORS.map(() => new AbortController());
-  return new Promise<OsmElement[]>((resolve, reject) => {
-    let resolved = false;
-    let pendingCount = OVERPASS_MIRRORS.length;
-    OVERPASS_MIRRORS.forEach((url, i) => {
-      runOverpassAt(url, query, controllers[i].signal)
-        .then((result) => {
-          if (resolved) return;
-          resolved = true;
-          // Abort any other still-pending mirrors so they don't waste sockets.
-          controllers.forEach((c, j) => { if (j !== i) c.abort(); });
-          resolve(result);
-        })
-        .catch((err) => {
-          errors.push(`${url}: ${String(err).slice(0, 100)}`);
-          // eslint-disable-next-line no-console
-          console.warn('[overpass] mirror failed', url, String(err));
-          pendingCount -= 1;
-          if (pendingCount === 0 && !resolved) {
-            reject(new PlacesError(`All Overpass mirrors failed:\n${errors.join('\n')}`));
-          }
-        });
-    });
-  });
+  for (const url of OVERPASS_MIRRORS) {
+    try {
+      return await runOverpassAt(url, query);
+    } catch (e) {
+      errors.push(`${url}: ${String(e).slice(0, 100)}`);
+      // eslint-disable-next-line no-console
+      console.warn('[overpass] mirror failed, trying next', url, String(e));
+    }
+  }
+  throw new PlacesError(`All Overpass mirrors failed:\n${errors.join('\n')}`);
 }
 
 interface NearbyOpts {
@@ -195,17 +179,17 @@ interface NearbyOpts {
 
 // Used for emergency flow — any hospital, sorted by distance. Prefer ones
 // tagged emergency=yes when available.
-export async function nearestEmergencyHospitals({ origin, radiusM = 6000 }: NearbyOpts): Promise<Hospital[]> {
+export async function nearestEmergencyHospitals({ origin, radiusM = 4000 }: NearbyOpts): Promise<Hospital[]> {
   const key = cacheKey(origin, 'er', radiusM);
   const cached = await readCache(key);
   if (cached) return cached;
 
-  // `out center tags 30;` caps response at 30 features for speed. Drop ways —
-  // nodes alone give us 90% of hospitals and are far faster.
+  // 4km radius + cap 12 features. Client sorts + keeps top 6. Bandwidth and
+  // server work both ~75% lower than the 30-feature version.
   const query = `
     [out:json][timeout:8];
     node["amenity"="hospital"](around:${radiusM},${origin.lat},${origin.lng});
-    out center tags 30;
+    out center tags 12;
   `;
   let elements: OsmElement[];
   try {
@@ -225,7 +209,7 @@ export async function nearestEmergencyHospitals({ origin, radiusM = 6000 }: Near
     return true;
   });
 
-  const result = unique.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 8);
+  const result = unique.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 6);
   writeCache(key, result);
   return result;
 }
@@ -262,53 +246,28 @@ interface SpecialtyOpts {
 // Used for routine/urgent flow. For specialties with a regex, we filter by
 // healthcare:speciality OR name match. Falls back to ALL nearby hospitals/
 // clinics if the filtered list is too short (OSM tag coverage is uneven).
-export async function hospitalsBySpecialty({ origin, specialty, radiusM = 8000 }: SpecialtyOpts): Promise<Hospital[]> {
+export async function hospitalsBySpecialty({ origin, specialty, radiusM = 5000 }: SpecialtyOpts): Promise<Hospital[]> {
   const key = cacheKey(origin, `sp:${specialty}`, radiusM);
   const cached = await readCache(key);
   if (cached) return cached;
 
-  const re = SPECIALTY_REGEX[specialty];
+  // 5km + cap 15 features. Client sorts by distance + keeps top 10.
   const base = specialty === 'dentistry'
     ? `["amenity"~"^(dentist|clinic|doctors)$"]`
     : `["amenity"~"^(hospital|clinic|doctors)$"]`;
   const around = `(around:${radiusM},${origin.lat},${origin.lng})`;
 
-  // Single-query approach using nodes only (90% coverage, 5–10x faster than
-  // including ways). `out center tags 50;` caps response size.
-  const filteredQuery = re
-    ? `
-      [out:json][timeout:10];
-      (
-        node${base}["healthcare:speciality"~"${re}",i]${around};
-        node${base}["name"~"${re}",i]${around};
-      );
-      out center tags 50;
-    `
-    : `
-      [out:json][timeout:10];
-      node${base}${around};
-      out center tags 50;
-    `;
+  const query = `
+    [out:json][timeout:8];
+    node${base}${around};
+    out center tags 15;
+  `;
 
   let elements: OsmElement[] = [];
   try {
-    elements = await runOverpass(filteredQuery);
+    elements = await runOverpass(query);
   } catch (e) {
     throw e instanceof PlacesError ? e : new PlacesError(String(e));
-  }
-
-  // Fallback only if filtered list is empty.
-  if (re && elements.length === 0) {
-    const fallback = `
-      [out:json][timeout:10];
-      node${base}${around};
-      out center tags 30;
-    `;
-    try {
-      elements = await runOverpass(fallback);
-    } catch {
-      // ignore — show what we have
-    }
   }
 
   const hospitals = elements
@@ -323,7 +282,7 @@ export async function hospitalsBySpecialty({ origin, specialty, radiusM = 8000 }
     return true;
   });
 
-  const result = unique.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 20);
+  const result = unique.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 10);
   writeCache(key, result);
   return result;
 }

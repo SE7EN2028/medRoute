@@ -17,7 +17,7 @@
     "@react-navigation/bottom-tabs": "^7.0.0",
     "@react-navigation/native": "^7.0.0",
     "@react-navigation/native-stack": "^7.0.0",
-    "expo": "*",
+    "expo": "^56.0.4",
     "expo-audio": "~56.0.9",
     "expo-blur": "~56.0.3",
     "expo-calendar": "*",
@@ -36,7 +36,7 @@
     "react-native-maps": "*",
     "react-native-reanimated": "*",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "4.25.1",
+    "react-native-screens": "4.25.2",
     "react-native-svg": "15.15.4",
     "react-native-worklets": "0.8.3",
     "tailwindcss": "^3.4.17",
@@ -45,6 +45,7 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "*",
+    "babel-preset-expo": "^56.0.12",
     "typescript": "*"
   },
   "private": true
