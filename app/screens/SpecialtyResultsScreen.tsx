@@ -8,7 +8,7 @@ import { Hero, Body, Eyebrow } from '@app/components/Type';
 import { Screen } from '@app/components/Screen';
 import { useAppStore } from '@app/store/useAppStore';
 import { hospitalsBySpecialty, PlacesError } from '@app/services/placesService';
-import { getCurrentLocation, getLastKnownLocation } from '@app/services/locationService';
+import { getLocationOrDefault } from '@app/services/locationService';
 import { SPECIALTY_BY_KEY } from '@app/data/specialties';
 import { estimatesFor } from '@app/data/costs';
 import { colors } from '@app/theme/colors';
@@ -20,6 +20,7 @@ export function SpecialtyResultsScreen({ route, navigation }: RootStackScreenPro
   const { specialty } = route.params;
   const apiKeys = useAppStore((s) => s.apiKeys);
   const setLastLocation = useAppStore((s) => s.setLastLocation);
+  const manualLocation = useAppStore((s) => s.manualLocation);
 
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,10 +33,10 @@ export function SpecialtyResultsScreen({ route, navigation }: RootStackScreenPro
   useEffect(() => {
     (async () => {
       try {
-        let loc = await getLastKnownLocation();
-        if (!loc) loc = await getCurrentLocation();
-        setLastLocation(loc);
-        const list = await hospitalsBySpecialty({ apiKey: apiKeys.googlePlaces, origin: loc, specialty });
+        const manual = manualLocation ? { lat: manualLocation.lat, lng: manualLocation.lng } : null;
+        const { location } = await getLocationOrDefault(manual);
+        setLastLocation(location);
+        const list = await hospitalsBySpecialty({ apiKey: apiKeys.googlePlaces, origin: location, specialty });
         setHospitals(list);
       } catch (e) {
         setError(e instanceof PlacesError ? e.message : String(e));
@@ -43,7 +44,7 @@ export function SpecialtyResultsScreen({ route, navigation }: RootStackScreenPro
         setLoading(false);
       }
     })();
-  }, [apiKeys.googlePlaces, specialty, setLastLocation]);
+  }, [apiKeys.googlePlaces, manualLocation, specialty, setLastLocation]);
 
   const sorted = useMemo(() => {
     const arr = [...hospitals];

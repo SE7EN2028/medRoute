@@ -7,7 +7,7 @@ import { HospitalCard } from '@app/components/HospitalCard';
 import { Display, Body, Caption } from '@app/components/Type';
 import { useAppStore } from '@app/store/useAppStore';
 import { nearestEmergencyHospitals, PlacesError } from '@app/services/placesService';
-import { getCurrentLocation, getLastKnownLocation } from '@app/services/locationService';
+import { getLocationOrDefault } from '@app/services/locationService';
 import { callNumber } from '@app/services/shareService';
 import type { Hospital } from '@app/types';
 import { SPECIALTY_BY_KEY } from '@app/data/specialties';
@@ -21,6 +21,7 @@ export function EmergencyScreen({ route, navigation }: RootStackScreenProps<'Eme
   const apiKeys = useAppStore((s) => s.apiKeys);
   const setLastHospitals = useAppStore((s) => s.setLastHospitals);
   const setLastLocation = useAppStore((s) => s.setLastLocation);
+  const manualLocation = useAppStore((s) => s.manualLocation);
 
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,10 +30,10 @@ export function EmergencyScreen({ route, navigation }: RootStackScreenProps<'Eme
   useEffect(() => {
     (async () => {
       try {
-        let loc = await getLastKnownLocation();
-        if (!loc) loc = await getCurrentLocation();
-        setLastLocation(loc);
-        const list = await nearestEmergencyHospitals({ apiKey: apiKeys.googlePlaces, origin: loc });
+        const manual = manualLocation ? { lat: manualLocation.lat, lng: manualLocation.lng } : null;
+        const { location } = await getLocationOrDefault(manual);
+        setLastLocation(location);
+        const list = await nearestEmergencyHospitals({ apiKey: apiKeys.googlePlaces, origin: location });
         setHospitals(list);
         setLastHospitals(list);
       } catch (e) {
@@ -41,7 +42,7 @@ export function EmergencyScreen({ route, navigation }: RootStackScreenProps<'Eme
         setLoading(false);
       }
     })();
-  }, [apiKeys.googlePlaces, setLastHospitals, setLastLocation]);
+  }, [apiKeys.googlePlaces, manualLocation, setLastHospitals, setLastLocation]);
 
   const callEmergency = async (num: string) => {
     try { await callNumber(num); } catch (e) { Alert.alert('Could not dial', String(e)); }

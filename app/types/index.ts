@@ -13,6 +13,7 @@ export type Specialty =
   | 'dermatology'
   | 'ent'
   | 'ophthalmology'
+  | 'dentistry'
   | 'obgyn'
   | 'psychiatry'
   | 'urology'
@@ -94,6 +95,12 @@ export interface OnboardingState {
 export interface UserProfile {
   name: string;       // editable display name
   photoUri?: string;  // local file URI from image picker
+}
+
+export interface ManualLocation {
+  label: string;      // human-readable address from Nominatim
+  lat: number;
+  lng: number;
 }
 
 export interface MedicalInfo {

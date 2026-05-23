@@ -21,6 +21,7 @@ const SPECIALTY_ICONS: Record<Specialty, { icon: IconName; tint: string; count: 
   pulmonology:       { icon: 'wave',        tint: colors.sageTint,  count: 14 },
   ent:               { icon: 'wave',        tint: colors.brickTint, count: 29 },
   ophthalmology:     { icon: 'eye',         tint: colors.sageTint,  count: 27 },
+  dentistry:         { icon: 'sparkle',     tint: '#E8E2D5',         count: 34 },
   obgyn:             { icon: 'heart',       tint: colors.brickTint, count: 36 },
   psychiatry:        { icon: 'leaf',        tint: colors.terraTint, count: 20 },
   urology:           { icon: 'water',       tint: colors.sageTint,  count: 16 },

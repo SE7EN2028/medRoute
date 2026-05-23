@@ -9,6 +9,7 @@ import { Toggle } from '@app/components/Toggle';
 import { Hero, Body, Caption, Eyebrow } from '@app/components/Type';
 import { Screen, TAB_BAR_BOTTOM_PAD } from '@app/components/Screen';
 import { useAppStore } from '@app/store/useAppStore';
+import { geocodeQuery, GeocodeError } from '@app/services/geocodeService';
 import { isNonEmpty, isPhoneish } from '@app/utils/validators';
 import { colors } from '@app/theme/colors';
 import { fonts } from '@app/theme/fonts';
@@ -234,6 +235,10 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
   const [nameDraft, setNameDraft] = useState('');
   const [editingBlood, setEditingBlood] = useState(false);
   const [bloodDraft, setBloodDraft] = useState('');
+  const [locQuery, setLocQuery] = useState('');
+  const [locSearching, setLocSearching] = useState(false);
+  const manualLocation = useAppStore((s) => s.manualLocation);
+  const setManualLocation = useAppStore((s) => s.setManualLocation);
 
   // Local-only preferences (demo)
   const [prefLocation, setPrefLocation] = useState(true);
@@ -283,6 +288,29 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
     setBloodType(bloodDraft);
     setEditingBlood(false);
   };
+
+  const onSearchLocation = async () => {
+    const q = locQuery.trim();
+    if (!q) return;
+    setLocSearching(true);
+    try {
+      const hit = await geocodeQuery(q);
+      if (!hit) {
+        Alert.alert('Not found', 'No place matched that name. Try adding city + state.');
+        return;
+      }
+      setManualLocation({ label: hit.label, lat: hit.location.lat, lng: hit.location.lng });
+      setLocQuery('');
+      Alert.alert('Location set', hit.label);
+    } catch (e) {
+      const msg = e instanceof GeocodeError ? e.message : String(e);
+      Alert.alert('Could not look up location', msg);
+    } finally {
+      setLocSearching(false);
+    }
+  };
+
+  const onClearLocation = () => setManualLocation(null);
 
   const onResetOnboarding = () => {
     Alert.alert(
@@ -412,6 +440,96 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
             </View>
           </Card>
         </View>
+
+        {/* Location override */}
+        <Section title="Location" sub="Used to find nearby hospitals & camps">
+          {manualLocation ? (
+            <View style={{ padding: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View
+                  style={{
+                    width: 36, height: 36, borderRadius: 12,
+                    backgroundColor: colors.sageTint,
+                    alignItems: 'center', justifyContent: 'center', marginRight: 12,
+                  }}
+                >
+                  <Icon name="pin" size={16} stroke={colors.sage} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Body weight="semi" size={14}>Custom location</Body>
+                  <Caption numberOfLines={2} style={{ marginTop: 2 }}>{manualLocation.label}</Caption>
+                  <Caption color={colors.muted2} style={{ marginTop: 2 }}>
+                    {manualLocation.lat.toFixed(4)}, {manualLocation.lng.toFixed(4)}
+                  </Caption>
+                </View>
+                <Pressable
+                  onPress={onClearLocation}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear manual location"
+                  hitSlop={6}
+                  style={({ pressed }) => ({
+                    width: 28, height: 28, borderRadius: 999,
+                    backgroundColor: colors.ink,
+                    alignItems: 'center', justifyContent: 'center',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Icon name="x" size={12} stroke="#fff" strokeWidth={2.4} />
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <View style={{ padding: 14 }}>
+              <Caption style={{ marginBottom: 8 }}>
+                Type your area + city (e.g. "Lohegaon Pune") to set location manually.
+              </Caption>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.line,
+                    backgroundColor: colors.cream,
+                  }}
+                >
+                  <Icon name="pin" size={14} stroke={colors.muted} />
+                  <TextInput
+                    value={locQuery}
+                    onChangeText={setLocQuery}
+                    placeholder="Lohegaon Pune"
+                    placeholderTextColor={colors.muted2}
+                    onSubmitEditing={onSearchLocation}
+                    returnKeyType="search"
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    style={{
+                      flex: 1,
+                      marginLeft: 8,
+                      fontSize: 14,
+                      color: colors.ink,
+                      fontFamily: fonts.sans,
+                      padding: 0,
+                    }}
+                  />
+                </View>
+                <Btn
+                  variant="primary"
+                  size="md"
+                  onPress={onSearchLocation}
+                  loading={locSearching}
+                  disabled={!locQuery.trim() || locSearching}
+                >
+                  Set
+                </Btn>
+              </View>
+            </View>
+          )}
+        </Section>
 
         {/* Emergency contacts */}
         <Section title="Emergency contacts" sub="Used by 'Bring someone with you'">

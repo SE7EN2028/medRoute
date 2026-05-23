@@ -5,6 +5,7 @@ import type {
   EmergencyContact,
   Hospital,
   LatLng,
+  ManualLocation,
   MedicalInfo,
   OnboardingState,
   TriageResult,
@@ -22,6 +23,7 @@ interface PersistedState {
   lastTriage: TriageResult | null;
   lastHospitals: Hospital[];
   lastLocation: LatLng | null;
+  manualLocation: ManualLocation | null;
   medicalInfo: MedicalInfo;
 }
 
@@ -55,6 +57,7 @@ interface AppState extends PersistedState {
   // places / location cache
   setLastHospitals: (h: Hospital[]) => void;
   setLastLocation: (l: LatLng) => void;
+  setManualLocation: (m: ManualLocation | null) => void;
 
   // medical profile
   setBloodType: (v: string) => void;
@@ -80,6 +83,7 @@ const DEFAULT_PERSISTED: PersistedState = {
   lastTriage: null,
   lastHospitals: [],
   lastLocation: null,
+  manualLocation: null,
   medicalInfo: DEFAULT_MEDICAL,
 };
 
@@ -115,6 +119,7 @@ function persistedSnapshot(s: AppState): PersistedState {
     lastTriage: s.lastTriage,
     lastHospitals: s.lastHospitals,
     lastLocation: s.lastLocation,
+    manualLocation: s.manualLocation,
     medicalInfo: s.medicalInfo,
   };
 }
@@ -196,6 +201,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setLastLocation: (l) => {
     set({ lastLocation: l });
+    writePersisted(persistedSnapshot(get()));
+  },
+  setManualLocation: (m) => {
+    set({ manualLocation: m });
     writePersisted(persistedSnapshot(get()));
   },
 

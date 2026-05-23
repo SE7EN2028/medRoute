@@ -18,6 +18,7 @@ export const SPECIALTIES: SpecialtyMeta[] = [
   { key: 'dermatology', label: 'Dermatology', description: 'Skin, rash, acne', placesKeyword: 'dermatology clinic' },
   { key: 'ent', label: 'ENT', description: 'Ear, nose, throat', placesKeyword: 'ENT hospital' },
   { key: 'ophthalmology', label: 'Ophthalmology', description: 'Eyes, vision', placesKeyword: 'eye hospital' },
+  { key: 'dentistry', label: 'Dentistry', description: 'Tooth, gum, jaw, oral', placesKeyword: 'dental clinic' },
   { key: 'obgyn', label: "Women's Health", description: 'Maternal & gynecology', placesKeyword: 'gynecology hospital' },
   { key: 'psychiatry', label: 'Mental Health', description: 'Anxiety, depression, counseling', placesKeyword: 'psychiatry clinic' },
   { key: 'urology', label: 'Urology', description: 'Kidney, bladder, urinary', placesKeyword: 'urology hospital' },

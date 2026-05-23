@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, Alert, Pressable } from 'react-native';
 import {
   useAudioRecorder,
@@ -9,6 +9,7 @@ import {
 import type { TabScreenProps } from '@app/navigation/types';
 import { useAppStore } from '@app/store/useAppStore';
 import { transcribeAudio } from '@app/services/groqService';
+import { requestLocationPermission } from '@app/services/locationService';
 import { Icon } from '@app/components/Icon';
 import { Btn } from '@app/components/Btn';
 import { Card } from '@app/components/Card';
@@ -39,6 +40,12 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const userName = useMemo(() => contacts[0]?.name?.split(' ')[0] ?? 'there', [contacts]);
+
+  // Ask for location once when Home mounts so the OSM hospital lookup has real
+  // coords by the time the user triggers triage. Silent if already granted/denied.
+  useEffect(() => {
+    requestLocationPermission().catch(() => {});
+  }, []);
 
   const onSubmit = () => {
     const trimmed = text.trim();

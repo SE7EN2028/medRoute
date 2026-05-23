@@ -1,6 +1,38 @@
-import type { TriageResult } from '@app/types';
+import type { Specialty, TriageResult } from '@app/types';
 import { matchEmergencyKeyword } from '@app/data/emergencyKeywords';
 import { parseTriageJson } from '@app/utils/validators';
+
+// Post-LLM safety net for obvious specialty miscategorisations. The model
+// sometimes drifts (e.g. routes "headache" to dentistry). These rules are
+// strict — applied only when the symptom clearly maps to one specialty.
+function correctSpecialty(symptom: string, llmPick: Specialty): Specialty {
+  const t = symptom.toLowerCase();
+
+  const has = (...words: string[]) => words.some((w) => t.includes(w));
+
+  // Hard rules — symptom text contains an unambiguous keyword.
+  if (has('tooth', 'teeth', 'molar', 'wisdom tooth', 'gum', 'gums', 'cavity', 'dental', 'oral cavity'))
+    return 'dentistry';
+
+  if (llmPick === 'dentistry' && !has('tooth', 'teeth', 'molar', 'wisdom', 'gum', 'cavity', 'jaw', 'dental', 'oral'))
+    // Model picked dentistry but no oral words in text → fall back.
+    return has('headache', 'migraine', 'sudden severe head')
+      ? (has('throbbing', 'migraine', 'aura', 'one side', 'light hurt', 'photophobia') ? 'neurology' : 'general')
+      : 'general';
+
+  if (has('chest pain', 'crushing chest', 'tight chest', 'heart attack')) return 'cardiology';
+  if (has('snake bite', 'snakebite', 'snake')) return 'toxicology';
+  if (has('eye', 'vision', 'eyesight', 'blurred')) {
+    if (!has('headache', 'migraine')) return 'ophthalmology';
+  }
+  if (has('rash', 'pimple', 'acne', 'skin')) return 'dermatology';
+  if (has('twist', 'sprain', 'fracture', 'broken bone', 'ankle', 'wrist', 'knee')) return 'orthopedics';
+  if (has('pregnant', 'period', 'menstrual', 'pregnancy', 'vagin')) return 'obgyn';
+  if (has('depress', 'anxious', 'panic', 'suicid', 'hopeless')) return 'psychiatry';
+  if (has('cough', 'breath', 'wheez', 'asthma')) return 'pulmonology';
+
+  return llmPick;
+}
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
@@ -15,13 +47,36 @@ Rules — follow strictly:
 1. Always err on the side of caution. When ambiguous, choose the HIGHER severity.
 2. Output ONLY valid JSON matching the schema. No prose, no markdown, no code fences.
 3. Always include exactly 3 immediateSteps — short, imperative, actionable. Even routine cases get 3 steps (e.g. "rest", "hydrate", "monitor"). Emergencies must include "Call 108 now." as step 1.
-4. Specialty must be ONE of: general, cardiology, orthopedics, pediatrics, neurology, pulmonology, gastroenterology, dermatology, ent, ophthalmology, obgyn, psychiatry, urology, oncology, toxicology, emergency_medicine.
+4. Specialty must be ONE of: general, cardiology, orthopedics, pediatrics, neurology, pulmonology, gastroenterology, dermatology, ent, ophthalmology, dentistry, obgyn, psychiatry, urology, oncology, toxicology, emergency_medicine.
 5. Severity must be exactly one of: emergency, urgent, routine.
    - emergency: immediate life/limb risk (chest pain, stroke signs, severe bleeding, anaphylaxis, suicidal ideation, unresponsive, snakebite, severe breathing trouble).
    - urgent: see a doctor today/within 24h (high fever in infant, fracture, persistent vomiting, dehydration, moderate burns).
    - routine: can wait 1–7 days (mild cold, mild rash, routine checkup).
 6. Confidence is your own self-rating 0–1. Be honest; low confidence is fine.
 7. Rationale: one short sentence, non-diagnostic. "Symptoms suggest a cardiology consult" — not "You have angina".
+
+8. Specialty disambiguation — pick the closest match. DENTISTRY only when text explicitly mentions tooth/teeth/gum/molar/wisdom/jaw/oral/cavity/dental. Otherwise NEVER pick dentistry.
+
+9. Worked examples (study these — match new inputs by closest analogy):
+   - "I have a headache" → general, routine.
+   - "Headache for 3 days, light hurts my eyes" → neurology, urgent.
+   - "Migraine again, throbbing on left side" → neurology, routine.
+   - "Sinus pressure and stuffy nose for 5 days" → ent, routine.
+   - "My tooth hurts when I chew" → dentistry, routine.
+   - "Wisdom tooth painful, gum is swollen" → dentistry, urgent.
+   - "Jaw locks when I open wide" → dentistry, routine.
+   - "Sore throat and ear ache" → ent, routine.
+   - "Chest pain when climbing stairs" → cardiology, urgent.
+   - "Twisted ankle, can't put weight" → orthopedics, urgent.
+   - "Rash on arm for 3 days" → dermatology, routine.
+   - "Toddler fever 101°F won't eat" → pediatrics, urgent.
+   - "Eye is red and blurry vision" → ophthalmology, urgent.
+   - "Burning when peeing" → urology, urgent.
+   - "Feeling hopeless, want to disappear" → psychiatry, emergency.
+   - "Snakebite" → toxicology, emergency.
+   - "Can't breathe" → emergency_medicine, emergency.
+
+10. If symptoms mention TWO body systems, pick the more specific one.
 
 Schema:
 {
@@ -81,7 +136,8 @@ export async function triageSymptom({ apiKey, symptom }: TriageOpts): Promise<Tr
       body: JSON.stringify({
         model: MODEL,
         response_format: { type: 'json_object' },
-        temperature: 0.2,
+        temperature: 0,
+        top_p: 0.9,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: `Symptom description: """${trimmed}"""` },
@@ -133,6 +189,11 @@ export async function triageSymptom({ apiKey, symptom }: TriageOpts): Promise<Tr
     };
   }
 
+  // Final guard — fix obvious specialty miscategorisations the LLM may produce.
+  const fixedSpecialty = correctSpecialty(trimmed, llmResult.specialty);
+  if (fixedSpecialty !== llmResult.specialty) {
+    return { ...llmResult, specialty: fixedSpecialty };
+  }
   return llmResult;
 }
 

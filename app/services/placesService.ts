@@ -15,8 +15,16 @@ import { haversineKm } from '@app/utils/distance';
 // of the app — it's ignored. Pass an empty string.
 // =============================================================================
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-const UA = 'MedRoute/0.1 (https://github.com/medroute/app)';
+// Multiple public Overpass instances — we try them in order so a single mirror
+// outage doesn't break the app.
+// Public Overpass mirrors that accept requests without a custom User-Agent.
+// NOTE: `overpass-api.de` returns HTTP 406 to default RN/CFNetwork UA.
+// NOTE: `overpass.osm.ch` returns HTTP 200 but with empty `elements` arrays
+//        for non-EU regions (stale sync) — excluded so we don't get fake-success.
+const OVERPASS_MIRRORS = [
+  'https://overpass.openstreetmap.fr/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
 
 export class PlacesError extends Error {}
 
@@ -74,18 +82,70 @@ function toHospital(el: OsmElement, origin: LatLng, isEmergency: boolean): Hospi
   };
 }
 
-async function runOverpass(query: string): Promise<OsmElement[]> {
-  const res = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': UA,
-    },
-    body: `data=${encodeURIComponent(query)}`,
+// Wrap fetch in a manual Promise.race timeout because AbortController is flaky
+// on older RN runtimes.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new PlacesError(`${label} timed out after ${ms}ms`)), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
   });
-  if (!res.ok) throw new PlacesError(`Overpass HTTP ${res.status}`);
+}
+
+const MIRROR_TIMEOUT_MS = 25000; // RN's first-hit fetch can be slow (DNS+TLS+OS overhead); give wide margin
+
+async function runOverpassAt(url: string, query: string, signal: AbortSignal): Promise<OsmElement[]> {
+  const trimmed = query.replace(/\s+/g, ' ').trim();
+  // GET ?data=... — lighter than POST + form body in React Native.
+  const fullUrl = `${url}?data=${encodeURIComponent(trimmed)}`;
+  const host = url.replace(/^https?:\/\//, '').split('/')[0];
+  const t0 = Date.now();
+  const res = await withTimeout(
+    fetch(fullUrl, { method: 'GET', signal }),
+    MIRROR_TIMEOUT_MS,
+    `Overpass ${host}`,
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new PlacesError(`Overpass HTTP ${res.status} @ ${host}: ${text.slice(0, 120)}`);
+  }
   const data = (await res.json()) as OverpassResponse;
+  // eslint-disable-next-line no-console
+  console.log(`[overpass] ${host} ok ${Date.now() - t0}ms ${(data.elements ?? []).length} elements`);
   return data.elements ?? [];
+}
+
+// Race all mirrors in parallel — first successful response wins. Once one
+// succeeds, in-flight stragglers are aborted so no socket leaks. If every
+// mirror fails, the overall failure surfaces after MIRROR_TIMEOUT_MS at most.
+async function runOverpass(query: string): Promise<OsmElement[]> {
+  const errors: string[] = [];
+  const controllers = OVERPASS_MIRRORS.map(() => new AbortController());
+  return new Promise<OsmElement[]>((resolve, reject) => {
+    let resolved = false;
+    let pendingCount = OVERPASS_MIRRORS.length;
+    OVERPASS_MIRRORS.forEach((url, i) => {
+      runOverpassAt(url, query, controllers[i].signal)
+        .then((result) => {
+          if (resolved) return;
+          resolved = true;
+          // Abort any other still-pending mirrors so they don't waste sockets.
+          controllers.forEach((c, j) => { if (j !== i) c.abort(); });
+          resolve(result);
+        })
+        .catch((err) => {
+          errors.push(`${url}: ${String(err).slice(0, 100)}`);
+          // eslint-disable-next-line no-console
+          console.warn('[overpass] mirror failed', url, String(err));
+          pendingCount -= 1;
+          if (pendingCount === 0 && !resolved) {
+            reject(new PlacesError(`All Overpass mirrors failed:\n${errors.join('\n')}`));
+          }
+        });
+    });
+  });
 }
 
 interface NearbyOpts {
@@ -98,11 +158,10 @@ interface NearbyOpts {
 // tagged emergency=yes when available.
 export async function nearestEmergencyHospitals({ origin, radiusM = 8000 }: NearbyOpts): Promise<Hospital[]> {
   const query = `
-    [out:json][timeout:20];
+    [out:json][timeout:12];
     (
       node["amenity"="hospital"](around:${radiusM},${origin.lat},${origin.lng});
       way["amenity"="hospital"](around:${radiusM},${origin.lat},${origin.lng});
-      relation["amenity"="hospital"](around:${radiusM},${origin.lat},${origin.lng});
     );
     out center tags;
   `;
@@ -141,6 +200,7 @@ const SPECIALTY_REGEX: Record<Specialty, string> = {
   dermatology: 'derma|skin',
   ent: 'ent|otolaryng|ear nose throat',
   ophthalmology: 'eye|ophthal|netra',
+  dentistry: 'dent|tooth|teeth|oral|denta',
   obgyn: 'gyn|obstet|maternity|matru',
   psychiatry: 'psych|mental|mind',
   urology: 'urolog|kidney|nephro',
@@ -161,13 +221,17 @@ interface SpecialtyOpts {
 // clinics if the filtered list is too short (OSM tag coverage is uneven).
 export async function hospitalsBySpecialty({ origin, specialty, radiusM = 12000 }: SpecialtyOpts): Promise<Hospital[]> {
   const re = SPECIALTY_REGEX[specialty];
-  const base = `["amenity"~"^(hospital|clinic|doctors)$"]`;
+  // Dentistry has its own OSM amenity tag — broaden the base match for that
+  // specialty so OSM returns actual dental clinics, not just hospitals named "dental".
+  const base = specialty === 'dentistry'
+    ? `["amenity"~"^(dentist|clinic|doctors)$"]`
+    : `["amenity"~"^(hospital|clinic|doctors)$"]`;
   const r = radiusM;
   const around = `(around:${r},${origin.lat},${origin.lng})`;
 
   const filteredQuery = re
     ? `
-      [out:json][timeout:25];
+      [out:json][timeout:15];
       (
         node${base}["healthcare:speciality"~"${re}",i]${around};
         node${base}["name"~"${re}",i]${around};
@@ -177,7 +241,7 @@ export async function hospitalsBySpecialty({ origin, specialty, radiusM = 12000 
       out center tags;
     `
     : `
-      [out:json][timeout:25];
+      [out:json][timeout:15];
       (
         node${base}${around};
         way${base}${around};
@@ -195,7 +259,7 @@ export async function hospitalsBySpecialty({ origin, specialty, radiusM = 12000 
   // Fallback: filter returned too little — broaden to all medical facilities.
   if (re && elements.length < 3) {
     const fallback = `
-      [out:json][timeout:25];
+      [out:json][timeout:15];
       (
         node${base}${around};
         way${base}${around};
