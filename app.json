@@ -14,7 +14,10 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "MedRoute uses your location to find nearby hospitals and emergency services.",
         "NSMicrophoneUsageDescription": "MedRoute uses the microphone so you can describe symptoms by voice.",
-        "NSCalendarsUsageDescription": "MedRoute saves blood-donation camps to your calendar when you opt in."
+        "NSCalendarsUsageDescription": "MedRoute saves blood-donation camps to your calendar when you opt in.",
+        "NSCalendarsWriteOnlyAccessUsageDescription": "MedRoute saves blood-donation camps to your calendar when you opt in.",
+        "NSCalendarsFullAccessUsageDescription": "MedRoute saves blood-donation camps to your calendar when you opt in.",
+        "NSPhotoLibraryUsageDescription": "MedRoute uses Photos to set a profile picture you choose."
       }
     },
     "android": {
@@ -37,7 +40,8 @@
       "expo-secure-store",
       "expo-calendar",
       "expo-audio",
-      "expo-font"
+      "expo-font",
+      "expo-sharing"
     ]
   }
 }

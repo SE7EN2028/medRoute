@@ -7,7 +7,11 @@ export interface ShareArgs {
 }
 
 function mapsLink(h: Hospital): string {
-  return `https://www.google.com/maps/search/?api=1&query=${h.location.lat},${h.location.lng}&query_place_id=${h.placeId}`;
+  // Only include query_place_id when it looks like a real Google Place ID
+  // (starts with "ChIJ"). Our mock IDs (e.g. "c18", "b3") would 400 the URL.
+  const validPlaceId = typeof h.placeId === 'string' && h.placeId.startsWith('ChIJ');
+  const base = `https://www.google.com/maps/search/?api=1&query=${h.location.lat},${h.location.lng}`;
+  return validPlaceId ? `${base}&query_place_id=${h.placeId}` : base;
 }
 
 export function buildShareMessage({ hospital, condition }: ShareArgs): string {

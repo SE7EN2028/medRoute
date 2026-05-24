@@ -4,7 +4,7 @@ import Svg, { Circle, Path, Rect, Defs, RadialGradient, Stop, LinearGradient as 
 import type { RootStackScreenProps } from '@app/navigation/types';
 import { Btn } from '@app/components/Btn';
 import { Icon } from '@app/components/Icon';
-import { Display, Hero, Body, Eyebrow } from '@app/components/Type';
+import { Display, Hero, Body, Caption, Eyebrow } from '@app/components/Type';
 import { Screen } from '@app/components/Screen';
 import { BottomBar } from '@app/components/BottomBar';
 import { useAppStore } from '@app/store/useAppStore';
@@ -93,9 +93,13 @@ const SLIDES: Slide[] = [
   { eyebrow: 'Not alone',   title: 'Bring someone\nwith you.',       body: 'One tap shares the hospital and your condition with a trusted contact. Because going alone is hard.', art: <Art3 /> },
 ];
 
+const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
+
 export function OnboardingScreen({ navigation }: RootStackScreenProps<'Onboarding'>) {
   const [step, setStep] = useState(0);
   const [accepted, setAccepted] = useState(false);
+  const [aboutName, setAboutName] = useState('');
+  const [aboutBlood, setAboutBlood] = useState<string>('');
   const [contacts, setContacts] = useState([
     { name: '', phone: '', relation: '' },
     { name: '', phone: '', relation: '' },
@@ -103,8 +107,12 @@ export function OnboardingScreen({ navigation }: RootStackScreenProps<'Onboardin
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const acceptDisclaimer = useAppStore((s) => s.acceptDisclaimer);
   const addContact = useAppStore((s) => s.addContact);
+  const setUserName = useAppStore((s) => s.setUserName);
+  const setBloodType = useAppStore((s) => s.setBloodType);
 
   const finish = () => {
+    if (aboutName.trim()) setUserName(aboutName.trim());
+    if (aboutBlood.trim()) setBloodType(aboutBlood.trim());
     contacts.forEach((c) => {
       if (isNonEmpty(c.name) && isPhoneish(c.phone)) {
         addContact({ name: c.name.trim(), phone: c.phone.trim(), relation: c.relation.trim() || undefined });
@@ -254,7 +262,7 @@ export function OnboardingScreen({ navigation }: RootStackScreenProps<'Onboardin
             size="xl"
             full
             disabled={!accepted}
-            onPress={() => setStep(4)}
+            onPress={() => setStep(4)}  // → About You
             iconRight={accepted ? <Icon name="arrow-right" size={18} stroke={colors.cream2} /> : undefined}
           >
             Continue
@@ -264,7 +272,154 @@ export function OnboardingScreen({ navigation }: RootStackScreenProps<'Onboardin
     );
   }
 
-  // ===================== STEP 4: CONTACTS =====================
+  // ===================== STEP 4: ABOUT YOU =====================
+  if (step === 4) {
+    const nameOk = aboutName.trim().length >= 1;
+    return (
+      <Screen bg={colors.cream}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 24,
+              paddingTop: 20,
+            }}
+          >
+            <Eyebrow>Step 4 of 5</Eyebrow>
+            <Pressable
+              onPress={() => setStep(5)}
+              accessibilityRole="button"
+              hitSlop={10}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={{ fontSize: 14, color: colors.muted, fontFamily: fonts.sansMedium }}>Skip</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Hero>A little{'\n'}about you.</Hero>
+            <Body size={15} style={{ marginTop: 12 }}>
+              We use this to personalise your profile and share with care providers in emergencies.
+            </Body>
+
+            {/* Name input */}
+            <View style={{ marginTop: 28 }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.muted,
+                  letterSpacing: 1.5,
+                  textTransform: 'uppercase',
+                  fontFamily: fonts.sansMedium,
+                  marginBottom: 8,
+                }}
+              >
+                Your name
+              </Text>
+              <View
+                style={{
+                  backgroundColor: colors.paper,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  borderRadius: 18,
+                  padding: 14,
+                }}
+              >
+                <TextInput
+                  placeholder="e.g. Aanya Krishnan"
+                  placeholderTextColor={colors.muted2}
+                  value={aboutName}
+                  onChangeText={setAboutName}
+                  autoCapitalize="words"
+                  style={{ fontSize: 16, color: colors.ink, fontFamily: fonts.sansSemi, padding: 0 }}
+                />
+              </View>
+            </View>
+
+            {/* Blood type pill grid */}
+            <View style={{ marginTop: 22 }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.muted,
+                  letterSpacing: 1.5,
+                  textTransform: 'uppercase',
+                  fontFamily: fonts.sansMedium,
+                  marginBottom: 8,
+                }}
+              >
+                Blood type
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {BLOOD_TYPES.map((b) => {
+                  const active = aboutBlood === b;
+                  return (
+                    <Pressable
+                      key={b}
+                      onPress={() => setAboutBlood(active ? '' : b)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      hitSlop={4}
+                      style={({ pressed }) => ({
+                        width: 64,
+                        height: 44,
+                        borderRadius: 999,
+                        backgroundColor: active ? colors.ink : colors.paper,
+                        borderWidth: 1,
+                        borderColor: active ? colors.ink : colors.line2,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: pressed ? 0.8 : 1,
+                      })}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: active ? colors.cream2 : colors.ink2,
+                          fontFamily: fonts.mono,
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        {b}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Caption color={colors.muted2} style={{ marginTop: 10 }}>
+                Optional — you can set this later in Profile too.
+              </Caption>
+            </View>
+          </ScrollView>
+
+          <BottomBar bg={colors.cream}>
+            <Btn
+              variant="primary"
+              size="xl"
+              full
+              disabled={!nameOk}
+              onPress={() => setStep(5)}
+              iconRight={nameOk ? <Icon name="arrow-right" size={18} stroke={colors.cream2} /> : undefined}
+            >
+              Continue
+            </Btn>
+          </BottomBar>
+        </KeyboardAvoidingView>
+      </Screen>
+    );
+  }
+
+  // ===================== STEP 5: CONTACTS =====================
   const valid = contacts.some((c) => isNonEmpty(c.name) && isPhoneish(c.phone));
   return (
     <Screen bg={colors.cream}>
@@ -282,7 +437,7 @@ export function OnboardingScreen({ navigation }: RootStackScreenProps<'Onboardin
             paddingTop: 20,
           }}
         >
-          <Eyebrow>Step 4 of 4</Eyebrow>
+          <Eyebrow>Step 5 of 5</Eyebrow>
           <Pressable
             onPress={finish}
             accessibilityRole="button"

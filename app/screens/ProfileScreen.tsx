@@ -248,8 +248,10 @@ export function ProfileScreen(_: TabScreenProps<'Profile'>) {
   const [prefVoice, setPrefVoice] = useState(false);
   const [prefCalm, setPrefCalm] = useState(true);
 
-  const displayName = user.name || contacts[0]?.name || 'You';
-  const initial = displayName[0]?.toUpperCase() ?? 'M';
+  // Profile name is the user's OWN name only — never falls back to a contact's
+  // name (caused confusion: adding a Rohit contact made profile read "Rohit").
+  const displayName = user.name || 'Set your name';
+  const initial = (user.name?.[0] ?? 'M').toUpperCase();
 
   const onAddContact = () => {
     if (!isNonEmpty(cName) || !isPhoneish(cPhone)) {

@@ -57,14 +57,19 @@ Rules — follow strictly:
 
 8. Specialty disambiguation — pick the closest match. DENTISTRY only when text explicitly mentions tooth/teeth/gum/molar/wisdom/jaw/oral/cavity/dental. Otherwise NEVER pick dentistry.
 
-9. Worked examples (study these — match new inputs by closest analogy):
+9. selfCare style examples (always conversational, warm, ends with "see a doctor if X"):
+   - Neck strain: "Mild neck strain usually settles in a few days. Try gentle neck rolls every couple of hours and a warm compress on the sore area. Paracetamol can help with discomfort. See a doctor if pain spreads to your arms, lasts past a week, or comes with numbness."
+   - Mild fever: "Rest, sip warm fluids, and keep the room cool. Paracetamol every 6 hours can help bring temperature down. See a doctor if fever is above 102°F, lasts more than 3 days, or comes with rash or stiff neck."
+   - Mild tooth sensitivity: "Switch to a soft-bristle brush and a sensitivity toothpaste for a week or two. Avoid very hot or cold foods. Salt-water rinses morning and night can soothe gums. See a dentist if pain sharpens or you notice swelling."
+
+10. Worked classification examples (match new inputs by closest analogy):
    - "I have a headache" → general, routine.
    - "Headache for 3 days, light hurts my eyes" → neurology, urgent.
+   - "Slight pain in my neck" → orthopedics, routine.
    - "Migraine again, throbbing on left side" → neurology, routine.
    - "Sinus pressure and stuffy nose for 5 days" → ent, routine.
    - "My tooth hurts when I chew" → dentistry, routine.
    - "Wisdom tooth painful, gum is swollen" → dentistry, urgent.
-   - "Jaw locks when I open wide" → dentistry, routine.
    - "Sore throat and ear ache" → ent, routine.
    - "Chest pain when climbing stairs" → cardiology, urgent.
    - "Twisted ankle, can't put weight" → orthopedics, urgent.
@@ -76,7 +81,7 @@ Rules — follow strictly:
    - "Snakebite" → toxicology, emergency.
    - "Can't breathe" → emergency_medicine, emergency.
 
-10. If symptoms mention TWO body systems, pick the more specific one.
+11. If symptoms mention TWO body systems, pick the more specific one.
 
 Schema:
 {
@@ -84,7 +89,8 @@ Schema:
   "specialty": "<one of the allowed values>",
   "immediateSteps": ["step 1", "step 2", "step 3"],
   "confidence": <0..1>,
-  "rationale": "<one short sentence>"
+  "rationale": "<one short sentence>",
+  "selfCare": "<2–4 conversational sentences with safe home-care or comfort advice, plus 'see a doctor if X' escalation cue. Mention common OTC medicine generically (e.g. 'paracetamol for pain') only when clearly safe. NEVER mention dosing for prescription drugs. For emergencies, keep selfCare to one calm reassurance line.>"
 }`;
 
 export class GroqError extends Error {

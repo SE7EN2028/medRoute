@@ -1,7 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Alert, Modal } from 'react-native';
 import Svg, { Path, Ellipse } from 'react-native-svg';
 import * as Calendar from 'expo-calendar';
+// Use legacy API — new File/Paths API doesn't ship the simple
+// writeAsStringAsync helper we need for a one-off .ics blob.
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import type { TabScreenProps } from '@app/navigation/types';
 import { Icon } from '@app/components/Icon';
 import { Chip } from '@app/components/Chip';
@@ -9,9 +13,12 @@ import { Badge } from '@app/components/Badge';
 import { Btn } from '@app/components/Btn';
 import { Hero, Title, Body, Caption, Eyebrow } from '@app/components/Type';
 import { Screen, TAB_BAR_BOTTOM_PAD } from '@app/components/Screen';
-import { MOCK_BLOOD_CAMPS } from '@app/data/camps';
 import type { BloodCamp, BloodType } from '@app/types';
 import { callNumber, openDirections } from '@app/services/shareService';
+import { anchorCampsTo } from '@app/utils/anchorCamps';
+import { useAppStore } from '@app/store/useAppStore';
+import { DEFAULT_LOCATION, getLastKnownLocation } from '@app/services/locationService';
+import { haversineKm } from '@app/utils/distance';
 import { colors } from '@app/theme/colors';
 import { fonts } from '@app/theme/fonts';
 
@@ -23,27 +30,113 @@ const POSITIONS = [
 
 type View_ = 'list' | 'map';
 
-async function addCampToCalendar(camp: BloodCamp) {
-  const perm = await Calendar.requestCalendarPermissionsAsync();
-  if (perm.status !== 'granted') {
-    Alert.alert('Calendar permission needed', 'Enable calendar access in Settings.');
-    return;
-  }
-  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-  const writable = calendars.find((c) => c.allowsModifications) ?? calendars[0];
-  if (!writable) return Alert.alert('No calendar available');
-  const [y, m, d] = camp.date.split('-').map(Number);
-  const [sh, sm] = camp.startTime.split(':').map(Number);
-  const [eh, em] = camp.endTime.split(':').map(Number);
-  await Calendar.createEventAsync(writable.id, {
-    title: `Blood Donation — ${camp.name}`,
-    startDate: new Date(y, m - 1, d, sh, sm),
-    endDate: new Date(y, m - 1, d, eh, em),
-    location: camp.address,
-    notes: `${camp.organizer}. Needs: ${camp.bloodTypesNeeded.join(', ')}.`,
-    alarms: [{ relativeOffset: -60 }],
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out (${ms}ms)`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
   });
-  Alert.alert('Saved', 'Reminder set in your calendar.');
+}
+
+// iCalendar timestamp: YYYYMMDDTHHMMSS (local, no Z)
+function icsTime(date: string, time: string): string {
+  const [y, m, d] = date.split('-');
+  const [hh, mm] = time.split(':');
+  return `${y}${m}${d}T${hh}${mm}00`;
+}
+
+function escapeIcs(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+}
+
+function buildIcs(camp: BloodCamp): string {
+  const uid = `${camp.id}-${Date.now()}@medroute`;
+  const dtstamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//MedRoute//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${dtstamp}`,
+    `DTSTART:${icsTime(camp.date, camp.startTime)}`,
+    `DTEND:${icsTime(camp.date, camp.endTime)}`,
+    `SUMMARY:${escapeIcs(`Blood Donation — ${camp.name}`)}`,
+    `LOCATION:${escapeIcs(camp.address)}`,
+    `DESCRIPTION:${escapeIcs(`${camp.organizer}. Needs: ${camp.bloodTypesNeeded.join(', ')}.`)}`,
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'TRIGGER:-PT1H',
+    'DESCRIPTION:Blood donation in 1 hour',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+// Native expo-calendar (works in dev builds with proper privacy strings).
+// Falls back to .ics file share when native API is unavailable or hangs
+// — that path works in Expo Go since iOS native Share sheet handles .ics
+// import without needing app-level permissions.
+async function addCampToCalendar(camp: BloodCamp) {
+  // ── 1. try native expo-calendar first
+  try {
+    const calMod = Calendar as unknown as {
+      requestCalendarPermissionsAsync: () => Promise<{ status: string }>;
+      requestWriteOnlyCalendarPermissionsAsync?: () => Promise<{ status: string }>;
+    };
+    let granted = false;
+    if (typeof calMod.requestWriteOnlyCalendarPermissionsAsync === 'function') {
+      const w = await withTimeout(calMod.requestWriteOnlyCalendarPermissionsAsync(), 4000, 'Calendar permission');
+      granted = w.status === 'granted';
+    }
+    if (!granted) {
+      const perm = await withTimeout(calMod.requestCalendarPermissionsAsync(), 4000, 'Calendar permission');
+      granted = perm.status === 'granted';
+    }
+    if (granted) {
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const writable = calendars.find((c) => c.allowsModifications) ?? calendars[0];
+      if (writable) {
+        const [y, m, d] = camp.date.split('-').map(Number);
+        const [sh, sm] = camp.startTime.split(':').map(Number);
+        const [eh, em] = camp.endTime.split(':').map(Number);
+        await Calendar.createEventAsync(writable.id, {
+          title: `Blood Donation — ${camp.name}`,
+          startDate: new Date(y, m - 1, d, sh, sm),
+          endDate: new Date(y, m - 1, d, eh, em),
+          location: camp.address,
+          notes: `${camp.organizer}. Needs: ${camp.bloodTypesNeeded.join(', ')}.`,
+          alarms: [{ relativeOffset: -60 }],
+        });
+        Alert.alert('Saved', 'Reminder set in your calendar.');
+        return;
+      }
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[calendar] native failed, falling back to .ics share', String(e));
+  }
+
+  // ── 2. fallback: write .ics file + open iOS Share sheet
+  try {
+    const ics = buildIcs(camp);
+    const filename = `medroute-${camp.id}.ics`;
+    const path = `${FileSystem.cacheDirectory}${filename}`;
+    await FileSystem.writeAsStringAsync(path, ics, { encoding: FileSystem.EncodingType.UTF8 });
+    const can = await Sharing.isAvailableAsync();
+    if (!can) {
+      Alert.alert('Share unavailable', 'Could not open Share sheet on this device.');
+      return;
+    }
+    await Sharing.shareAsync(path, {
+      mimeType: 'text/calendar',
+      UTI: 'public.calendar-event',
+      dialogTitle: 'Add to Calendar',
+    });
+  } catch (e) {
+    Alert.alert('Could not save', String(e));
+  }
 }
 
 // Friendly date label: "Today" | "Tomorrow" | "Sat 25 May"
@@ -66,12 +159,7 @@ function friendlyDate(iso: string): { label: string; tile: { eyebrow: string; sy
   };
 }
 
-function distanceFromCenter(_: BloodCamp): string {
-  // Mock distance for visual fidelity until live location matching is added.
-  return (Math.random() * 5 + 0.8).toFixed(1);
-}
-
-function CampCard({ c, onClick }: { c: BloodCamp; onClick: () => void }) {
+function CampCard({ c, onClick, distanceKm }: { c: BloodCamp; onClick: () => void; distanceKm: number }) {
   const urgent = !!c.urgent;
   const { label, tile } = friendlyDate(c.date);
   const slots = c.slots ?? 0;
@@ -140,7 +228,7 @@ function CampCard({ c, onClick }: { c: BloodCamp; onClick: () => void }) {
         </Caption>
         <Text style={{ fontSize: 12.5, color: colors.muted2, marginHorizontal: 8 }}>·</Text>
         <Icon name="pin" size={12} stroke={colors.muted} />
-        <Caption style={{ marginLeft: 4 }}>{distanceFromCenter(c)} km</Caption>
+        <Caption style={{ marginLeft: 4 }}>{distanceKm.toFixed(1)} km</Caption>
         <View style={{ flex: 1 }} />
         {slots > 0 && (
           <Text style={{ fontSize: 12.5, color: colors.sage, fontFamily: fonts.sansSemi }}>
@@ -364,9 +452,29 @@ export function BloodCampsScreen(_: TabScreenProps<'BloodCamps'>) {
   const [bloodFilter, setBloodFilter] = useState<BloodType | null>(null);
   const [selected, setSelected] = useState<BloodCamp | null>(null);
 
+  // Anchor camps to user's location so they appear nearby.
+  const manualLocation = useAppStore((s) => s.manualLocation);
+  const [origin, setOrigin] = useState(
+    manualLocation
+      ? { lat: manualLocation.lat, lng: manualLocation.lng }
+      : DEFAULT_LOCATION
+  );
+
+  useEffect(() => {
+    if (manualLocation) {
+      setOrigin({ lat: manualLocation.lat, lng: manualLocation.lng });
+      return;
+    }
+    getLastKnownLocation().then((loc) => { if (loc) setOrigin(loc); }).catch(() => {});
+  }, [manualLocation]);
+
+  const localized = useMemo(() => anchorCampsTo(origin), [origin]);
+
   const filtered = useMemo(() => {
-    return MOCK_BLOOD_CAMPS.filter((c) => !bloodFilter || c.bloodTypesNeeded.includes(bloodFilter));
-  }, [bloodFilter]);
+    return localized.filter((c) => !bloodFilter || c.bloodTypesNeeded.includes(bloodFilter));
+  }, [localized, bloodFilter]);
+
+  const distanceFor = (c: BloodCamp) => haversineKm(origin, c.location);
 
   return (
     <Screen bg={colors.cream}>
@@ -442,7 +550,9 @@ export function BloodCampsScreen(_: TabScreenProps<'BloodCamps'>) {
                 <Body size={14}>No camps match this filter.</Body>
               </View>
             )}
-            {filtered.map((c) => <CampCard key={c.id} c={c} onClick={() => setSelected(c)} />)}
+            {filtered.map((c) => (
+              <CampCard key={c.id} c={c} onClick={() => setSelected(c)} distanceKm={distanceFor(c)} />
+            ))}
           </View>
         )}
       </ScrollView>

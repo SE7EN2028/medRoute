@@ -143,7 +143,25 @@ export function EmergencyScreen({ route, navigation }: RootStackScreenProps<'Eme
             </Pressable>
           </View>
 
-          <View style={{ paddingHorizontal: 22, paddingTop: 28 }}>
+          {triage.selfCare ? (
+            <View style={{ paddingHorizontal: 22, paddingTop: 22 }}>
+              <View
+                style={{
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.12)',
+                }}
+              >
+                <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 19, fontFamily: fonts.sans }}>
+                  {triage.selfCare}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          <View style={{ paddingHorizontal: 22, paddingTop: 22 }}>
             <Text style={{ fontSize: 11, letterSpacing: 1.8, textTransform: 'uppercase', color: 'rgba(255,255,255,0.62)', marginBottom: 12, fontFamily: fonts.sansSemi }}>
               While you wait — do these
             </Text>

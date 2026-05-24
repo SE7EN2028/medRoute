@@ -35,12 +35,12 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const apiKeys = useAppStore((s) => s.apiKeys);
-  const contacts = useAppStore((s) => s.contacts);
+  const user = useAppStore((s) => s.user);
   const lastTriage = useAppStore((s) => s.lastTriage);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const userName = useMemo(() => contacts[0]?.name?.split(' ')[0] ?? 'there', [contacts]);
+  const userName = useMemo(() => user.name?.split(' ')[0] || 'there', [user.name]);
 
   const manualLocation = useAppStore((s) => s.manualLocation);
 
@@ -231,9 +231,9 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
                     minHeight: 110,
                     paddingVertical: 14,
                     paddingHorizontal: 14,
-                    backgroundColor: 'rgba(255,255,255,0.55)',
+                    backgroundColor: 'rgba(255,255,255,0.7)',
                     borderWidth: 1,
-                    borderColor: colors.line,
+                    borderColor: colors.line2,
                     borderRadius: 14,
                     justifyContent: 'space-between',
                     opacity: pressed ? 0.7 : 1,
@@ -283,13 +283,13 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
                 alignItems: 'center', justifyContent: 'center', marginRight: 14,
               }}
             >
-              <Icon name="phone-fill" size={18} stroke="#fff" />
+              <Icon name="phone-fill" size={18} stroke="#000000" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, color: '#fff', fontFamily: fonts.sansMedium }}>
+              <Text style={{ fontSize: 14, color: '#000000', fontFamily: fonts.sansMedium }}>
                 In immediate danger? Call 108.
               </Text>
-              <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2, fontFamily: fonts.sans }}>
+              <Text style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.7)', marginTop: 2, fontFamily: fonts.sans }}>
                 One-tap emergency services
               </Text>
             </View>

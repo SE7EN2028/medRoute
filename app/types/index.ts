@@ -27,6 +27,7 @@ export interface TriageResult {
   immediateSteps: string[]; // exactly 3 short, imperative steps
   confidence: number; // 0..1
   rationale: string; // one-sentence, non-diagnostic
+  selfCare?: string; // 2–4 sentence conversational home-remedy / comfort advice
   overrideReason?: string; // set if hardcoded keyword forced emergency
   rawSymptom: string;
   createdAt: number; // epoch ms

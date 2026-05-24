@@ -90,7 +90,24 @@ export function ResultsScreen({ route, navigation }: RootStackScreenProps<'Resul
           </Body>
         </View>
 
-        <View style={{ paddingHorizontal: 18, paddingTop: 22 }}>
+        {/* Quick remedy — conversational care tip from the LLM */}
+        {triage.selfCare ? (
+          <View style={{ paddingHorizontal: 18, paddingTop: 22 }}>
+            <Card bg={colors.terraTint} borderColor="#EBC9B8">
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <Icon name="sparkle" size={15} stroke={colors.terra} />
+                <Text style={{ marginLeft: 8, fontSize: 13, color: '#8B4E32', fontFamily: fonts.sansSemi }}>
+                  Quick remedy
+                </Text>
+              </View>
+              <Body size={14} color={colors.ink2} style={{ lineHeight: 20 }}>
+                {triage.selfCare}
+              </Body>
+            </Card>
+          </View>
+        ) : null}
+
+        <View style={{ paddingHorizontal: 18, paddingTop: 14 }}>
           <Card bg={colors.sageTint} borderColor={colors.sageTint2}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
               <Icon name="leaf" size={16} stroke={colors.sage} />
