@@ -10,6 +10,16 @@ import type { Specialty } from '@app/types';
 import { colors } from '@app/theme/colors';
 import { fonts } from '@app/theme/fonts';
 
+type FilterKey = 'all' | 'urgent' | 'telemedicine' | 'open_now' | 'insurance';
+
+const FILTER_KEYS: Record<FilterKey, Specialty[]> = {
+  all:         [],
+  urgent:      ['emergency_medicine', 'toxicology', 'cardiology', 'orthopedics'],
+  telemedicine: ['general', 'psychiatry', 'dermatology', 'ent', 'ophthalmology'],
+  open_now:    ['emergency_medicine', 'general', 'pediatrics', 'ent', 'orthopedics'],
+  insurance:   ['cardiology', 'oncology', 'neurology', 'pulmonology', 'urology', 'obgyn', 'orthopedics'],
+};
+
 const SPECIALTY_ICONS: Record<Specialty, { icon: IconName; tint: string; count: number }> = {
   general:           { icon: 'heart-pulse', tint: colors.sageTint,  count: 24 },
   cardiology:        { icon: 'heart',       tint: colors.brickTint, count: 22 },
@@ -32,11 +42,20 @@ const SPECIALTY_ICONS: Record<Specialty, { icon: IconName; tint: string; count: 
 
 export function FindCareScreen({ navigation }: TabScreenProps<'FindCare'>) {
   const [query, setQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return SPECIALTIES;
-    const q = query.toLowerCase();
-    return SPECIALTIES.filter((s) => s.label.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
-  }, [query]);
+    let list = SPECIALTIES;
+    if (activeFilter !== 'all') {
+      const keys = FILTER_KEYS[activeFilter];
+      list = list.filter((s) => keys.includes(s.key));
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter((s) => s.label.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+    }
+    return list;
+  }, [query, activeFilter]);
 
   return (
     <Screen bg={colors.cream}>
@@ -72,12 +91,12 @@ export function FindCareScreen({ navigation }: TabScreenProps<'FindCare'>) {
         </View>
 
         {/* Filter chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 14, gap: 6 }}>
-          <Chip active>All</Chip>
-          <Chip icon={<Icon name="flame" size={11} stroke={colors.brick2} />}>Urgent care</Chip>
-          <Chip>Telemedicine</Chip>
-          <Chip>Open now</Chip>
-          <Chip>Insurance ✓</Chip>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 14, paddingBottom: 2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Chip active={activeFilter === 'all'}        onPress={() => setActiveFilter('all')}>All</Chip>
+          <Chip active={activeFilter === 'urgent'}     onPress={() => setActiveFilter('urgent')}     icon={<Icon name="flame" size={11} stroke={activeFilter === 'urgent' ? colors.cream2 : colors.brick2} />}>Urgent care</Chip>
+          <Chip active={activeFilter === 'telemedicine'} onPress={() => setActiveFilter('telemedicine')}>Telemedicine</Chip>
+          <Chip active={activeFilter === 'open_now'}   onPress={() => setActiveFilter('open_now')}>Open now</Chip>
+          <Chip active={activeFilter === 'insurance'}  onPress={() => setActiveFilter('insurance')}>Insurance ✓</Chip>
         </ScrollView>
 
         {/* Grid */}

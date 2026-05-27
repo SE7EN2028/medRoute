@@ -139,7 +139,7 @@ export function ResultsScreen({ route, navigation }: RootStackScreenProps<'Resul
             {loading ? 'Loading matching hospitals…' : `${sorted.length} matches near you`}
           </Text>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 12, gap: 6 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 12, paddingBottom: 2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Chip active={sortKey === 'distance'} onPress={() => setSortKey('distance')} icon={<Icon name="pin" size={12} stroke={sortKey === 'distance' ? colors.cream2 : colors.ink2} />}>
             Nearest
           </Chip>

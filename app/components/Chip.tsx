@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, Text, View, Animated, StyleSheet } from 'react-native';
 import { colors } from '@app/theme/colors';
 import { fonts } from '@app/theme/fonts';
 
@@ -11,28 +11,59 @@ interface Props {
 }
 
 export function Chip({ children, active, onPress, icon }: Props) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () =>
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  const onPressOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 2 }).start();
+
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!active }}
-      style={({ pressed }) => ({
-        flexDirection: 'row',
-        alignItems: 'center',
-        height: 34,
-        paddingHorizontal: 14,
-        borderRadius: 999,
-        backgroundColor: active ? colors.ink : colors.paper,
-        borderWidth: 1,
-        borderColor: active ? colors.ink : colors.line2,
-        opacity: pressed ? 0.86 : 1,
-        transform: [{ scale: pressed ? 0.97 : 1 }],
-      })}
-    >
-      {icon ? <View style={{ marginRight: 6 }}>{icon}</View> : null}
-      <Text style={{ color: active ? colors.cream2 : colors.ink2, fontFamily: fonts.sansMedium, fontSize: 13 }}>
-        {children}
-      </Text>
+    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} accessibilityRole="button" accessibilityState={{ selected: !!active }}>
+      <Animated.View style={[styles.base, active ? styles.active : styles.inactive, { transform: [{ scale }] }]}>
+        {icon != null && <View style={styles.iconWrap}>{icon}</View>}
+        <Text style={[styles.label, active ? styles.labelActive : styles.labelInactive]}>
+          {children}
+        </Text>
+      </Animated.View>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+  },
+  active: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  inactive: {
+    backgroundColor: colors.cream,
+    borderColor: colors.line2,
+  },
+  iconWrap: {
+    marginRight: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontSize: 13,
+    lineHeight: 18,
+    includeFontPadding: false,
+  },
+  labelActive: {
+    color: colors.cream2,
+    fontFamily: fonts.sansSemi,
+  },
+  labelInactive: {
+    color: colors.ink2,
+    fontFamily: fonts.sansMedium,
+  },
+});
