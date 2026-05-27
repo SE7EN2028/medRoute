@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Pressable, View, Animated, StyleSheet } from 'react-native';
 import { colors } from '@app/theme/colors';
 
 interface Props {
@@ -9,42 +9,65 @@ interface Props {
 }
 
 export function Toggle({ value, onChange, accessibilityLabel }: Props) {
+  const translateX = useRef(new Animated.Value(value ? 18 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(translateX, {
+      toValue: value ? 18 : 0,
+      useNativeDriver: true,
+      speed: 32,
+      bounciness: 3,
+    }).start();
+  }, [value]);
+
   return (
     <Pressable
       onPress={() => onChange(!value)}
       accessibilityRole="switch"
       accessibilityState={{ checked: value }}
       accessibilityLabel={accessibilityLabel}
-      hitSlop={6}
-      style={({ pressed }) => ({
-        width: 46,
-        height: 28,
-        borderRadius: 999,
-        backgroundColor: value ? colors.terra : colors.ink,
-        padding: 3,
-        opacity: pressed ? 0.85 : 1,
-        // Dark shadow when off, terra glow when on
-        shadowColor: value ? colors.terra : '#1A1A17',
-        shadowOpacity: value ? 0.35 : 0.45,
-        shadowRadius: value ? 6 : 4,
-        shadowOffset: { width: 0, height: value ? 3 : 2 },
-        elevation: 3,
-      })}
+      hitSlop={8}
     >
-      <View
-        style={{
-          width: 22,
-          height: 22,
-          borderRadius: 999,
-          backgroundColor: '#fff',
-          transform: [{ translateX: value ? 18 : 0 }],
-          shadowColor: '#000',
-          shadowOpacity: 0.18,
-          shadowRadius: 3,
-          shadowOffset: { width: 0, height: 1 },
-          elevation: 1,
-        }}
-      />
+      <View style={[styles.track, value ? styles.trackOn : styles.trackOff]}>
+        <Animated.View style={[styles.thumb, { transform: [{ translateX }] }]} />
+      </View>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  track: {
+    width: 48,
+    height: 28,
+    borderRadius: 999,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  trackOn: {
+    backgroundColor: colors.terra,
+    shadowColor: colors.terra,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  trackOff: {
+    backgroundColor: '#C8C2BB',
+    shadowColor: '#1A1A17',
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  thumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: colors.paper,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+});
