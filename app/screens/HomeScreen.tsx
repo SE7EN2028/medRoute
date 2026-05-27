@@ -50,13 +50,13 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
     (async () => {
       try {
         await requestLocationPermission();
-      } catch {}
+      } catch { }
       try {
         const manual = manualLocation ? { lat: manualLocation.lat, lng: manualLocation.lng } : null;
         const { location } = await getLocationOrDefault(manual);
         // Warm the cache — same key the Emergency/Results screens will look up.
-        nearestEmergencyHospitals({ origin: location }).catch(() => {});
-      } catch {}
+        nearestEmergencyHospitals({ origin: location }).catch(() => { });
+      } catch { }
     })();
   }, [manualLocation]);
 
@@ -283,7 +283,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
                 alignItems: 'center', justifyContent: 'center', marginRight: 14,
               }}
             >
-              <Icon name="phone-fill" size={18} stroke="#000000" />
+              <Icon name="phone-fill" size={18} stroke="#ffffff" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 14, color: '#000000', fontFamily: fonts.sansMedium }}>
