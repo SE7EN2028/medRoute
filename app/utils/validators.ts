@@ -4,7 +4,7 @@ const SEVERITIES: Severity[] = ['emergency', 'urgent', 'routine'];
 const SPECIALTIES: Specialty[] = [
   'general', 'cardiology', 'orthopedics', 'pediatrics', 'neurology',
   'pulmonology', 'gastroenterology', 'dermatology', 'ent', 'ophthalmology',
-  'obgyn', 'psychiatry', 'urology', 'oncology', 'toxicology', 'emergency_medicine',
+  'dentistry', 'obgyn', 'psychiatry', 'urology', 'oncology', 'toxicology', 'emergency_medicine',
 ];
 
 // Defensive parser: LLM JSON output cannot be trusted blindly.
