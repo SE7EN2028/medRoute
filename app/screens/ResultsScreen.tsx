@@ -136,7 +136,7 @@ export function ResultsScreen({ route, navigation }: RootStackScreenProps<'Resul
         <View style={{ paddingHorizontal: 22, paddingTop: 24 }}>
           <Eyebrow>Nearby clinics</Eyebrow>
           <Text style={{ fontSize: 22, color: colors.ink, marginTop: 4, fontFamily: fonts.serif, paddingTop: 3 }}>
-            {sorted.length} matches near you
+            {loading ? 'Loading matching hospitals…' : `${sorted.length} matches near you`}
           </Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 12, gap: 6 }}>
