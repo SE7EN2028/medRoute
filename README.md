@@ -111,9 +111,3 @@ npm run typecheck  # tsc --noEmit
 ```
 
 ---
-
-<div align="center">
-
-*Calm, not clinical · Call 108 in emergencies*
-
-</div>
