@@ -98,6 +98,12 @@ export function SpecialtyResultsScreen({ route, navigation }: RootStackScreenPro
               <Body size={12} style={{ marginTop: 4 }}>{error}</Body>
             </View>
           )}
+          {!loading && !error && sorted.length === 0 && (
+            <View style={{ padding: 16, backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line }}>
+              <Body weight="semi">No {meta.label.toLowerCase()} centers nearby</Body>
+              <Body size={13} style={{ marginTop: 4 }}>Try a wider area or pick a related specialty.</Body>
+            </View>
+          )}
           {sorted.map((h) => (
             <HospitalCard
               key={h.placeId}

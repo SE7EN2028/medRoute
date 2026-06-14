@@ -7,7 +7,7 @@ import { haversineKm } from '@app/utils/distance';
 // rarely changes; OSM tile-level queries are deterministic. Cache key is
 // rounded to ~1km so small phone drift still hits the cache.
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — hospitals rarely move
-const CACHE_PREFIX = 'medroute.overpass.v2.';
+const CACHE_PREFIX = 'medroute.overpass.v3.';
 
 interface CacheEntry {
   ts: number;
@@ -40,6 +40,33 @@ async function writeCache(key: string, hospitals: Hospital[]): Promise<void> {
   }
 }
 
+// Raw OSM elements are cached per LOCATION (specialty-independent) so switching
+// specialty tiles filters in memory instead of refetching.
+interface RawCacheEntry {
+  ts: number;
+  elements: OsmElement[];
+}
+
+async function readRawCache(key: string): Promise<OsmElement[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as RawCacheEntry;
+    if (Date.now() - entry.ts > CACHE_TTL_MS) return null;
+    return entry.elements;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRawCache(key: string, elements: OsmElement[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify({ ts: Date.now(), elements }));
+  } catch {
+    // swallow
+  }
+}
+
 // =============================================================================
 // OpenStreetMap-backed hospital lookup. Free, no API key.
 // -----------------------------------------------------------------------------
@@ -62,7 +89,6 @@ async function writeCache(key: string, hospitals: Hospital[]): Promise<void> {
 //        regions (stale sync) — excluded so we don't get fake-success.
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.openstreetmap.fr/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
@@ -247,8 +273,9 @@ export async function nearestEmergencyHospitals({ origin, radiusM = 4000 }: Near
   return result;
 }
 
-// OSM regex keyword per specialty — matched against both `healthcare:speciality`
-// and the place `name`. Empty regex means "any hospital/clinic" (general/ER).
+// OSM regex keyword per specialty — used server-side (Overpass) against the
+// `healthcare:speciality` tag and the place `name`. Empty regex means "any
+// hospital/clinic" (general / emergency).
 const SPECIALTY_REGEX: Record<Specialty, string> = {
   general: '',
   cardiology: 'cardio|heart',
@@ -258,7 +285,7 @@ const SPECIALTY_REGEX: Record<Specialty, string> = {
   pulmonology: 'pulmon|chest|respir|lung',
   gastroenterology: 'gastro|liver|digest',
   dermatology: 'derma|skin',
-  ent: 'ent|otolaryng|ear nose throat',
+  ent: 'otolaryng|ear nose throat',
   ophthalmology: 'eye|ophthal|netra',
   dentistry: 'dent|tooth|teeth|oral|denta',
   obgyn: 'gyn|obstet|maternity|matru',
@@ -276,24 +303,25 @@ interface SpecialtyOpts {
   radiusM?: number;
 }
 
-// Used for routine/urgent flow. For specialties with a regex, we filter by
-// healthcare:speciality OR name match. Falls back to ALL nearby hospitals/
-// clinics if the filtered list is too short (OSM tag coverage is uneven).
-export async function hospitalsBySpecialty({ origin, specialty, radiusM = 5000 }: SpecialtyOpts): Promise<Hospital[]> {
-  const key = cacheKey(origin, `sp:${specialty}`, radiusM);
-  const cached = await readCache(key);
+// Fetch all nearby healthcare places with ONE fast, index-backed query (plain
+// `amenity=` equality — regex/`~"^(a|b)$"` filters bypass the Overpass index and
+// time out). Specialty-independent + cached per location, so tile switches don't
+// refetch. Returns raw elements (tags retained) for client-side filtering.
+async function fetchHealthcareElements(origin: LatLng, radiusM: number): Promise<OsmElement[]> {
+  const key = cacheKey(origin, 'all', radiusM);
+  const cached = await readRawCache(key);
   if (cached) return cached;
 
-  // 5km + cap 15 features. Client sorts by distance + keeps top 10.
-  const base = specialty === 'dentistry'
-    ? `["amenity"~"^(dentist|clinic|doctors)$"]`
-    : `["amenity"~"^(hospital|clinic|doctors)$"]`;
   const around = `(around:${radiusM},${origin.lat},${origin.lng})`;
-
   const query = `
-    [out:json][timeout:8];
-    node${base}${around};
-    out center tags 15;
+    [out:json][timeout:25];
+    (
+      node["amenity"="hospital"]${around};
+      node["amenity"="clinic"]${around};
+      node["amenity"="doctors"]${around};
+      node["amenity"="dentist"]${around};
+    );
+    out center tags 80;
   `;
 
   let elements: OsmElement[] = [];
@@ -302,50 +330,52 @@ export async function hospitalsBySpecialty({ origin, specialty, radiusM = 5000 }
   } catch (e) {
     throw e instanceof PlacesError ? e : new PlacesError(String(e));
   }
+  writeRawCache(key, elements);
+  return elements;
+}
 
-  // Match a place against the specialty regex via OSM speciality tags + name.
-  // Empty regex (general / emergency) matches everything.
-  const regexStr = SPECIALTY_REGEX[specialty];
-  const re = regexStr ? new RegExp(regexStr, 'i') : null;
-  const matchesSpecialty = (el: OsmElement): boolean => {
-    if (!re) return true;
-    const t = el.tags ?? {};
-    const hay = [
-      t['healthcare:speciality'],
-      t['healthcare:speciality:en'],
-      t['medical_speciality'],
-      t['healthcare'],
-      t['name'],
-      t['operator'],
-    ]
-      .filter(Boolean)
-      .join(' ');
-    return re.test(hay);
-  };
+// True if an OSM element matches the requested specialty. general / emergency
+// match everything; dentistry uses the first-class dentist tag; others match the
+// controlled `healthcare:speciality` tag or the place name.
+function elementMatchesSpecialty(el: OsmElement, specialty: Specialty): boolean {
+  if (specialty === 'general' || specialty === 'emergency_medicine') return true;
+  const t = el.tags ?? {};
+  if (specialty === 'dentistry') {
+    return t['amenity'] === 'dentist' || /dental|dentist/i.test(t['name'] ?? '');
+  }
+  const regex = SPECIALTY_REGEX[specialty];
+  if (!regex) return true;
+  const re = new RegExp(regex, 'i');
+  const hay = [
+    t['healthcare:speciality'],
+    t['healthcare:speciality:en'],
+    t['medical_speciality'],
+    t['name'],
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return re.test(hay);
+}
 
-  const tagged = elements
-    .map((el) => {
-      const h = toHospital(el, origin, false);
-      return h ? { h, match: matchesSpecialty(el) } : null;
-    })
-    .filter((x): x is { h: Hospital; match: boolean } => !!x);
+// Routine/urgent flow. Fetches nearby healthcare once, then filters to the
+// specialty in memory. Empty result = none tagged nearby (not an error).
+export async function hospitalsBySpecialty({ origin, specialty, radiusM = 6000 }: SpecialtyOpts): Promise<Hospital[]> {
+  const elements = await fetchHealthcareElements(origin, radiusM);
+
+  const hospitals = elements
+    .filter((el) => elementMatchesSpecialty(el, specialty))
+    .map((el) => toHospital(el, origin, false))
+    .filter((h): h is Hospital => !!h);
 
   const seen = new Set<string>();
-  const unique = tagged.filter(({ h }) => {
+  const unique = hospitals.filter((h) => {
     const k = `${h.name}@${h.location.lat.toFixed(3)},${h.location.lng.toFixed(3)}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
 
-  const byDist = (a: Hospital, b: Hospital) => a.distanceKm - b.distanceKm;
-  const matched = unique.filter((x) => x.match).map((x) => x.h).sort(byDist);
-  const rest = unique.filter((x) => !x.match).map((x) => x.h).sort(byDist);
-
-  // Specialty matches first, then nearest others fill remaining slots.
-  const result = [...matched, ...rest].slice(0, 10);
-  writeCache(key, result);
-  return result;
+  return unique.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 10);
 }
 
 // Kept for API parity with the old Google-backed version. OSM phone numbers
