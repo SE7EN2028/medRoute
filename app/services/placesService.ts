@@ -54,13 +54,16 @@ async function writeCache(key: string, hospitals: Hospital[]): Promise<void> {
 // of the app — it's ignored. Pass an empty string.
 // =============================================================================
 
-// Multiple public Overpass instances — we try them in order so a single mirror
-// outage doesn't break the app.
-// Public Overpass mirrors that accept requests without a custom User-Agent.
-// NOTE: `overpass-api.de` returns HTTP 406 to default RN/CFNetwork UA.
-// NOTE: `overpass.osm.ch` returns HTTP 200 but with empty `elements` arrays
-//        for non-EU regions (stale sync) — excluded so we don't get fake-success.
+// Multiple public Overpass instances — raced in parallel (see runOverpass) so a
+// single slow/down mirror doesn't stall the whole lookup.
+// NOTE: `overpass-api.de` 406s the default RN/CFNetwork UA — we send an explicit
+//        User-Agent below to satisfy it.
+// NOTE: `overpass.osm.ch` returns HTTP 200 with empty `elements` for non-EU
+//        regions (stale sync) — excluded so we don't get fake-success.
 const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.openstreetmap.fr/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
@@ -133,7 +136,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-const MIRROR_TIMEOUT_MS = 12000; // single mirror, tighter cap
+const MIRROR_TIMEOUT_MS = 9000; // per mirror; mirrors race in parallel
 
 async function runOverpassAt(url: string, query: string): Promise<OsmElement[]> {
   const trimmed = query.replace(/\s+/g, ' ').trim();
@@ -141,7 +144,13 @@ async function runOverpassAt(url: string, query: string): Promise<OsmElement[]> 
   const host = url.replace(/^https?:\/\//, '').split('/')[0];
   const t0 = Date.now();
   const res = await withTimeout(
-    fetch(fullUrl, { method: 'GET' }),
+    fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'MedRoute/1.0 (hospital finder)',
+      },
+    }),
     MIRROR_TIMEOUT_MS,
     `Overpass ${host}`,
   );
@@ -155,20 +164,44 @@ async function runOverpassAt(url: string, query: string): Promise<OsmElement[]> 
   return data.elements ?? [];
 }
 
-// Sequential: hit one mirror, if it fails fall to next. Avoids burst-firing all
-// mirrors at once which can trigger rate-limits on repeat lookups.
+// Parallel race: fire all mirrors at once, resolve on the first NON-EMPTY
+// response so one slow/down mirror can't stall the lookup. Results are cached,
+// so a single burst per lookup won't hammer the mirrors. If every mirror only
+// returns empty (valid query, nothing nearby) we resolve []; we reject only when
+// all mirrors error out.
 async function runOverpass(query: string): Promise<OsmElement[]> {
   const errors: string[] = [];
-  for (const url of OVERPASS_MIRRORS) {
-    try {
-      return await runOverpassAt(url, query);
-    } catch (e) {
-      errors.push(`${url}: ${String(e).slice(0, 100)}`);
-      // eslint-disable-next-line no-console
-      console.warn('[overpass] mirror failed, trying next', url, String(e));
-    }
-  }
-  throw new PlacesError(`All Overpass mirrors failed:\n${errors.join('\n')}`);
+  let gotEmpty = false;
+  return new Promise<OsmElement[]>((resolve, reject) => {
+    let pending = OVERPASS_MIRRORS.length;
+    let settled = false;
+    const onAllDone = () => {
+      if (settled) return;
+      settled = true;
+      if (gotEmpty) resolve([]);
+      else reject(new PlacesError(`All Overpass mirrors failed:\n${errors.join('\n')}`));
+    };
+    OVERPASS_MIRRORS.forEach((url) => {
+      runOverpassAt(url, query).then(
+        (els) => {
+          if (els.length > 0) {
+            if (!settled) { settled = true; resolve(els); }
+          } else {
+            gotEmpty = true;
+            pending -= 1;
+            if (pending === 0) onAllDone();
+          }
+        },
+        (e) => {
+          errors.push(`${url}: ${String(e).slice(0, 100)}`);
+          // eslint-disable-next-line no-console
+          console.warn('[overpass] mirror failed', url, String(e));
+          pending -= 1;
+          if (pending === 0) onAllDone();
+        }
+      );
+    });
+  });
 }
 
 interface NearbyOpts {
@@ -270,19 +303,47 @@ export async function hospitalsBySpecialty({ origin, specialty, radiusM = 5000 }
     throw e instanceof PlacesError ? e : new PlacesError(String(e));
   }
 
-  const hospitals = elements
-    .map((el) => toHospital(el, origin, false))
-    .filter((h): h is Hospital => !!h);
+  // Match a place against the specialty regex via OSM speciality tags + name.
+  // Empty regex (general / emergency) matches everything.
+  const regexStr = SPECIALTY_REGEX[specialty];
+  const re = regexStr ? new RegExp(regexStr, 'i') : null;
+  const matchesSpecialty = (el: OsmElement): boolean => {
+    if (!re) return true;
+    const t = el.tags ?? {};
+    const hay = [
+      t['healthcare:speciality'],
+      t['healthcare:speciality:en'],
+      t['medical_speciality'],
+      t['healthcare'],
+      t['name'],
+      t['operator'],
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return re.test(hay);
+  };
+
+  const tagged = elements
+    .map((el) => {
+      const h = toHospital(el, origin, false);
+      return h ? { h, match: matchesSpecialty(el) } : null;
+    })
+    .filter((x): x is { h: Hospital; match: boolean } => !!x);
 
   const seen = new Set<string>();
-  const unique = hospitals.filter((h) => {
+  const unique = tagged.filter(({ h }) => {
     const k = `${h.name}@${h.location.lat.toFixed(3)},${h.location.lng.toFixed(3)}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
 
-  const result = unique.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 10);
+  const byDist = (a: Hospital, b: Hospital) => a.distanceKm - b.distanceKm;
+  const matched = unique.filter((x) => x.match).map((x) => x.h).sort(byDist);
+  const rest = unique.filter((x) => !x.match).map((x) => x.h).sort(byDist);
+
+  // Specialty matches first, then nearest others fill remaining slots.
+  const result = [...matched, ...rest].slice(0, 10);
   writeCache(key, result);
   return result;
 }

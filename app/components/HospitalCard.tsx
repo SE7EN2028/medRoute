@@ -35,11 +35,8 @@ function hashRating(placeId: string): { rating: number; reviews: number } {
   return { rating: Math.round(rating * 10) / 10, reviews };
 }
 
-function statusText(isEmergency: boolean | undefined): { text: string; open: boolean } {
-  if (isEmergency) return { text: 'Open 24 hours', open: true };
-  const h = new Date().getHours();
-  if (h >= 21 || h < 7) return { text: 'Closed · opens 7am', open: false };
-  return { text: `Open · closes ${h < 13 ? '9pm' : h < 17 ? '8pm' : '9pm'}`, open: true };
+function statusText(_isEmergency: boolean | undefined): { text: string; open: boolean } {
+  return { text: 'Open 24 hours', open: true };
 }
 
 export function HospitalCard({ hospital, costs, isEmergency, showCost, onShare }: Props) {

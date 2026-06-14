@@ -13,31 +13,31 @@ import { fonts } from '@app/theme/fonts';
 type FilterKey = 'all' | 'urgent' | 'telemedicine' | 'open_now' | 'insurance';
 
 const FILTER_KEYS: Record<FilterKey, Specialty[]> = {
-  all:         [],
-  urgent:      ['emergency_medicine', 'toxicology', 'cardiology', 'orthopedics'],
+  all: [],
+  urgent: ['emergency_medicine', 'toxicology', 'cardiology', 'orthopedics'],
   telemedicine: ['general', 'psychiatry', 'dermatology', 'ent', 'ophthalmology'],
-  open_now:    ['emergency_medicine', 'general', 'pediatrics', 'ent', 'orthopedics'],
-  insurance:   ['cardiology', 'oncology', 'neurology', 'pulmonology', 'urology', 'obgyn', 'orthopedics'],
+  open_now: ['emergency_medicine', 'general', 'pediatrics', 'ent', 'orthopedics'],
+  insurance: ['cardiology', 'oncology', 'neurology', 'pulmonology', 'urology', 'obgyn', 'orthopedics'],
 };
 
 const SPECIALTY_ICONS: Record<Specialty, { icon: IconName; tint: string; count: number }> = {
-  general:           { icon: 'heart-pulse', tint: colors.sageTint,  count: 24 },
-  cardiology:        { icon: 'heart',       tint: colors.brickTint, count: 22 },
-  orthopedics:       { icon: 'shield',      tint: '#E8E2D5',         count: 10 },
-  pediatrics:        { icon: 'sun',         tint: colors.amberTint, count: 27 },
-  dermatology:       { icon: 'sparkle',     tint: colors.terraTint, count: 28 },
-  neurology:         { icon: 'sparkles',    tint: colors.sageTint,  count: 26 },
-  gastroenterology:  { icon: 'water',       tint: colors.amberTint, count: 37 },
-  pulmonology:       { icon: 'wave',        tint: colors.sageTint,  count: 14 },
-  ent:               { icon: 'wave',        tint: colors.brickTint, count: 29 },
-  ophthalmology:     { icon: 'eye',         tint: colors.sageTint,  count: 27 },
-  dentistry:         { icon: 'sparkle',     tint: '#E8E2D5',         count: 34 },
-  obgyn:             { icon: 'heart',       tint: colors.brickTint, count: 36 },
-  psychiatry:        { icon: 'leaf',        tint: colors.terraTint, count: 20 },
-  urology:           { icon: 'water',       tint: colors.sageTint,  count: 16 },
-  oncology:          { icon: 'shield-plus', tint: colors.brickTint, count: 11 },
-  toxicology:        { icon: 'alert',       tint: colors.amberTint, count: 4 },
-  emergency_medicine:{ icon: 'plus',        tint: colors.brickTint, count: 10 },
+  general: { icon: 'heart-pulse', tint: colors.sageTint, count: 24 },
+  cardiology: { icon: 'heart', tint: colors.brickTint, count: 22 },
+  orthopedics: { icon: 'shield', tint: '#E8E2D5', count: 10 },
+  pediatrics: { icon: 'sun', tint: colors.amberTint, count: 27 },
+  dermatology: { icon: 'sparkle', tint: colors.terraTint, count: 28 },
+  neurology: { icon: 'sparkles', tint: colors.sageTint, count: 26 },
+  gastroenterology: { icon: 'water', tint: colors.amberTint, count: 37 },
+  pulmonology: { icon: 'wave', tint: colors.sageTint, count: 14 },
+  ent: { icon: 'wave', tint: colors.brickTint, count: 29 },
+  ophthalmology: { icon: 'eye', tint: colors.sageTint, count: 27 },
+  dentistry: { icon: 'sparkle', tint: '#E8E2D5', count: 34 },
+  obgyn: { icon: 'heart', tint: colors.brickTint, count: 36 },
+  psychiatry: { icon: 'leaf', tint: colors.terraTint, count: 20 },
+  urology: { icon: 'water', tint: colors.sageTint, count: 16 },
+  oncology: { icon: 'shield-plus', tint: colors.brickTint, count: 11 },
+  toxicology: { icon: 'alert', tint: colors.amberTint, count: 4 },
+  emergency_medicine: { icon: 'plus', tint: colors.brickTint, count: 10 },
 };
 
 export function FindCareScreen({ navigation }: TabScreenProps<'FindCare'>) {
@@ -92,11 +92,11 @@ export function FindCareScreen({ navigation }: TabScreenProps<'FindCare'>) {
 
         {/* Filter chips */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 14, paddingBottom: 2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Chip active={activeFilter === 'all'}        onPress={() => setActiveFilter('all')}>All</Chip>
-          <Chip active={activeFilter === 'urgent'}     onPress={() => setActiveFilter('urgent')}     icon={<Icon name="flame" size={11} stroke={activeFilter === 'urgent' ? colors.cream2 : colors.brick2} />}>Urgent care</Chip>
+          <Chip active={activeFilter === 'all'} onPress={() => setActiveFilter('all')}>All</Chip>
+          <Chip active={activeFilter === 'urgent'} onPress={() => setActiveFilter('urgent')} icon={<Icon name="flame" size={11} stroke={activeFilter === 'urgent' ? colors.cream2 : colors.brick2} />}>Urgent care</Chip>
           <Chip active={activeFilter === 'telemedicine'} onPress={() => setActiveFilter('telemedicine')}>Telemedicine</Chip>
-          <Chip active={activeFilter === 'open_now'}   onPress={() => setActiveFilter('open_now')}>Open now</Chip>
-          <Chip active={activeFilter === 'insurance'}  onPress={() => setActiveFilter('insurance')}>Insurance ✓</Chip>
+          <Chip active={activeFilter === 'open_now'} onPress={() => setActiveFilter('open_now')}>Open now</Chip>
+          <Chip active={activeFilter === 'insurance'} onPress={() => setActiveFilter('insurance')}>Insurance ✓</Chip>
         </ScrollView>
 
         {/* Grid */}
@@ -154,9 +154,9 @@ export function FindCareScreen({ navigation }: TabScreenProps<'FindCare'>) {
             }}
           >
             {[
-              { name: 'Apex City Hospital',         sub: 'Cardiology · Visited recently' },
-              { name: 'Dr. Mehra — Dermatology',     sub: 'Last appointment' },
-              { name: 'Greenleaf Family Clinic',     sub: 'Pediatrics · 2 prior visits' },
+              { name: 'Apex City Hospital', sub: 'Cardiology · Visited recently' },
+              { name: 'Dr. Mehra — Dermatology', sub: 'Last appointment' },
+              { name: 'Greenleaf Family Clinic', sub: 'Pediatrics · 2 prior visits' },
             ].map((x, i, arr) => (
               <Pressable
                 key={i}

@@ -15,7 +15,7 @@ import { Hero, Title, Body, Caption, Eyebrow } from '@app/components/Type';
 import { Screen, TAB_BAR_BOTTOM_PAD } from '@app/components/Screen';
 import type { BloodCamp, BloodType } from '@app/types';
 import { callNumber, openDirections } from '@app/services/shareService';
-import { anchorCampsTo } from '@app/utils/anchorCamps';
+import { MOCK_BLOOD_CAMPS } from '@app/data/camps';
 import { useAppStore } from '@app/store/useAppStore';
 import { DEFAULT_LOCATION, getLastKnownLocation } from '@app/services/locationService';
 import { haversineKm } from '@app/utils/distance';
@@ -468,7 +468,14 @@ export function BloodCampsScreen(_: TabScreenProps<'BloodCamps'>) {
     getLastKnownLocation().then((loc) => { if (loc) setOrigin(loc); }).catch(() => {});
   }, [manualLocation]);
 
-  const localized = useMemo(() => anchorCampsTo(origin), [origin]);
+  // Sort camps by real distance from origin; keep each camp's true location.
+  const localized = useMemo(
+    () =>
+      [...MOCK_BLOOD_CAMPS].sort(
+        (a, b) => haversineKm(origin, a.location) - haversineKm(origin, b.location)
+      ),
+    [origin]
+  );
 
   const filtered = useMemo(() => {
     return localized.filter((c) => !bloodFilter || c.bloodTypesNeeded.includes(bloodFilter));
