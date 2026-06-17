@@ -48,7 +48,7 @@ export function HospitalCard({ hospital, costs, isEmergency, showCost, onShare }
     try { await callNumber(hospital.phone); } catch (e) { Alert.alert('Call failed', String(e)); }
   };
 
-  const distance = formatKm(hospital.distanceKm).replace(/\s.*$/, '');
+  const [distance, distanceUnit] = formatKm(hospital.distanceKm).split(' ');
   const eta = etaFromKm(hospital.distanceKm);
 
   const { rating, reviews } = hashRating(hospital.placeId);
@@ -100,7 +100,7 @@ export function HospitalCard({ hospital, costs, isEmergency, showCost, onShare }
             {distance}
           </Text>
           <Text style={{ fontSize: 10, marginTop: 2, color: isEmergency ? colors.brick2 : colors.sage, letterSpacing: 0.6, textTransform: 'uppercase', fontFamily: fonts.sansSemi }}>
-            km · {eta}
+            {distanceUnit} · {eta}
           </Text>
         </View>
       </View>
